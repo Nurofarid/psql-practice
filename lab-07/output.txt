@@ -1,0 +1,218 @@
+$ psql -d pk_practice -a -f lab07_primary_keys.sql
+-- Lab 07: Primary Keys
+-- Run with: bash run.sh   (creates a fresh pk_practice database)
+-- Contains 5 EXPECTED errors (marked below).
+-- 1. Three ways to define a primary key
+-- Method 1: column-level constraint
+CREATE TABLE students_m1 (
+    student_id INTEGER PRIMARY KEY,
+    name VARCHAR(100),
+    email VARCHAR(150)
+);
+CREATE TABLE
+-- Method 2: table-level constraint
+CREATE TABLE students_m2 (
+    student_id INTEGER,
+    name VARCHAR(100),
+    email VARCHAR(150),
+    PRIMARY KEY (student_id)
+);
+CREATE TABLE
+-- Method 3: named constraint
+CREATE TABLE students_m3 (
+    student_id INTEGER,
+    name VARCHAR(100),
+    email VARCHAR(150),
+    CONSTRAINT pk_students PRIMARY KEY (student_id)
+);
+CREATE TABLE
+-- Index names: students_m1_pkey (chosen by PostgreSQL) vs pk_students (chosen by me)
+\d students_m1
+                      Table "public.students_m1"
+   Column   |          Type          | Collation | Nullable | Default 
+------------+------------------------+-----------+----------+---------
+ student_id | integer                |           | not null | 
+ name       | character varying(100) |           |          | 
+ email      | character varying(150) |           |          | 
+Indexes:
+    "students_m1_pkey" PRIMARY KEY, btree (student_id)
+
+\d students_m3
+                      Table "public.students_m3"
+   Column   |          Type          | Collation | Nullable | Default 
+------------+------------------------+-----------+----------+---------
+ student_id | integer                |           | not null | 
+ name       | character varying(100) |           |          | 
+ email      | character varying(150) |           |          | 
+Indexes:
+    "pk_students" PRIMARY KEY, btree (student_id)
+
+-- 2. Adding a primary key to an existing table
+CREATE TABLE teachers (
+    teacher_id INTEGER,
+    name VARCHAR(100)
+);
+CREATE TABLE
+ALTER TABLE teachers ADD CONSTRAINT pk_teachers PRIMARY KEY (teacher_id);
+ALTER TABLE
+\d teachers
+                       Table "public.teachers"
+   Column   |          Type          | Collation | Nullable | Default 
+------------+------------------------+-----------+----------+---------
+ teacher_id | integer                |           | not null | 
+ name       | character varying(100) |           |          | 
+Indexes:
+    "pk_teachers" PRIMARY KEY, btree (teacher_id)
+
+-- 3. Single primary key
+CREATE TABLE students (
+    student_id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(150) UNIQUE,
+    faculty VARCHAR(50)
+);
+CREATE TABLE
+INSERT INTO students (name, email, faculty) VALUES
+('Alice Johnson', 'alice@alatoo.edu.kg', 'Computer Science'),
+('Bob Smith', 'bob@alatoo.edu.kg', 'Mathematics'),
+('Carol Davis', 'carol@alatoo.edu.kg', 'Computer Science');
+INSERT 0 3
+SELECT * FROM students;
+ student_id |     name      |        email        |     faculty      
+------------+---------------+---------------------+------------------
+          1 | Alice Johnson | alice@alatoo.edu.kg | Computer Science
+          2 | Bob Smith     | bob@alatoo.edu.kg   | Mathematics
+          3 | Carol Davis   | carol@alatoo.edu.kg | Computer Science
+(3 rows)
+
+-- 4. Composite primary key
+CREATE TABLE course_enrollments (
+    student_id INTEGER,
+    course_id INTEGER,
+    semester VARCHAR(20),
+    enrollment_date DATE DEFAULT CURRENT_DATE,
+    grade CHAR(2),
+    PRIMARY KEY (student_id, course_id, semester)
+);
+CREATE TABLE
+INSERT INTO course_enrollments (student_id, course_id, semester, grade) VALUES
+(1, 101, '2024-Spring', 'A'),
+(1, 102, '2024-Spring', 'B+'),
+(2, 101, '2024-Spring', 'A-'),
+(1, 101, '2024-Fall', 'A+');   -- same student and course, different semester: allowed
+INSERT 0 4
+SELECT student_id, course_id, semester, grade FROM course_enrollments;
+ student_id | course_id |  semester   | grade 
+------------+-----------+-------------+-------
+          1 |       101 | 2024-Spring | A 
+          1 |       102 | 2024-Spring | B+
+          2 |       101 | 2024-Spring | A-
+          1 |       101 | 2024-Fall   | A+
+(4 rows)
+
+-- EXPECTED ERROR: the combination (1, 101, 2024-Spring) already exists
+INSERT INTO course_enrollments (student_id, course_id, semester, grade)
+VALUES (1, 101, '2024-Spring', 'C');
+psql:lab07_primary_keys.sql:68: ERROR:  duplicate key value violates unique constraint "course_enrollments_pkey"
+DETAIL:  Key (student_id, course_id, semester)=(1, 101, 2024-Spring) already exists.
+-- 5. AUTO_INCREMENT equivalents: SERIAL, BIGSERIAL, IDENTITY
+CREATE TABLE products (
+    product_id SERIAL PRIMARY KEY,
+    product_name VARCHAR(100) NOT NULL,
+    price DECIMAL(10,2)
+);
+CREATE TABLE
+CREATE TABLE transactions (
+    transaction_id BIGSERIAL PRIMARY KEY,   -- can handle very large numbers
+    amount DECIMAL(15,2),
+    transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE
+CREATE TABLE orders (
+    order_id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    customer_name VARCHAR(100),
+    order_date DATE DEFAULT CURRENT_DATE
+);
+CREATE TABLE
+CREATE TABLE customers (
+    customer_id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    customer_name VARCHAR(100),
+    email VARCHAR(150)
+);
+CREATE TABLE
+-- SERIAL = INTEGER NOT NULL DEFAULT nextval('products_product_id_seq')
+\d products
+                                           Table "public.products"
+    Column    |          Type          | Collation | Nullable |                   Default                    
+--------------+------------------------+-----------+----------+----------------------------------------------
+ product_id   | integer                |           | not null | nextval('products_product_id_seq'::regclass)
+ product_name | character varying(100) |           | not null | 
+ price        | numeric(10,2)          |           |          | 
+Indexes:
+    "products_pkey" PRIMARY KEY, btree (product_id)
+
+-- GENERATED ALWAYS: PostgreSQL controls the value
+INSERT INTO orders (customer_name) VALUES ('Aida');
+INSERT 0 1
+-- EXPECTED ERROR: a value cannot be given manually
+INSERT INTO orders (order_id, customer_name) VALUES (500, 'Timur');
+psql:lab07_primary_keys.sql:96: ERROR:  cannot insert a non-DEFAULT value into column "order_id"
+DETAIL:  Column "order_id" is an identity column defined as GENERATED ALWAYS.
+HINT:  Use OVERRIDING SYSTEM VALUE to override.
+SELECT order_id, customer_name FROM orders;
+ order_id | customer_name 
+----------+---------------
+        1 | Aida
+(1 row)
+
+-- GENERATED BY DEFAULT: manual value allowed, otherwise generated
+INSERT INTO customers (customer_id, customer_name, email)
+VALUES (1000, 'VIP Customer', 'vip@example.com');
+INSERT 0 1
+INSERT INTO customers (customer_name, email)
+VALUES ('Regular Customer', 'regular@example.com');
+INSERT 0 1
+SELECT * FROM customers;
+ customer_id |  customer_name   |        email        
+-------------+------------------+---------------------
+        1000 | VIP Customer     | vip@example.com
+           1 | Regular Customer | regular@example.com
+(2 rows)
+
+-- 6. Primary key constraints: UNIQUE + NOT NULL + one per table
+CREATE TABLE departments (
+    dept_id INTEGER PRIMARY KEY,
+    dept_name VARCHAR(100)
+);
+CREATE TABLE
+INSERT INTO departments VALUES (1, 'Computer Science');
+INSERT 0 1
+-- EXPECTED ERROR: duplicate key
+INSERT INTO departments VALUES (1, 'Mathematics');
+psql:lab07_primary_keys.sql:112: ERROR:  duplicate key value violates unique constraint "departments_pkey"
+DETAIL:  Key (dept_id)=(1) already exists.
+-- EXPECTED ERROR: null value
+INSERT INTO departments VALUES (NULL, 'Physics');
+psql:lab07_primary_keys.sql:114: ERROR:  null value in column "dept_id" of relation "departments" violates not-null constraint
+DETAIL:  Failing row contains (null, Physics).
+-- EXPECTED ERROR: only one primary key per table
+ALTER TABLE departments ADD PRIMARY KEY (dept_name);
+psql:lab07_primary_keys.sql:116: ERROR:  multiple primary keys for table "departments" are not allowed
+-- 7. Automatic index creation: one B-tree index per primary key
+\di *pkey|pk_*
+                                   List of indexes
+ Schema |          Name           | Type  |        Owner         |       Table        
+--------+-------------------------+-------+----------------------+--------------------
+ public | course_enrollments_pkey | index | nurofaridkukanbekova | course_enrollments
+ public | customers_pkey          | index | nurofaridkukanbekova | customers
+ public | departments_pkey        | index | nurofaridkukanbekova | departments
+ public | orders_pkey             | index | nurofaridkukanbekova | orders
+ public | pk_students             | index | nurofaridkukanbekova | students_m3
+ public | pk_teachers             | index | nurofaridkukanbekova | teachers
+ public | products_pkey           | index | nurofaridkukanbekova | products
+ public | students_m1_pkey        | index | nurofaridkukanbekova | students_m1
+ public | students_m2_pkey        | index | nurofaridkukanbekova | students_m2
+ public | students_pkey           | index | nurofaridkukanbekova | students
+ public | transactions_pkey       | index | nurofaridkukanbekova | transactions
+(11 rows)
+
