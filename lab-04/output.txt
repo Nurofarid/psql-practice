@@ -1,0 +1,101 @@
+$ psql -d lab04_sql -a -f lab04_first_sql_query.sql
+-- Lab 04: First SQL Query
+-- Run with: psql -d lab04_sql -f lab04_first_sql_query.sql
+DROP TABLE IF EXISTS students;
+psql:lab04_first_sql_query.sql:4: NOTICE:  table "students" does not exist, skipping
+DROP TABLE
+-- Sample table used by all queries
+CREATE TABLE students (
+    student_id SERIAL PRIMARY KEY,
+    name       VARCHAR(50),
+    email      VARCHAR(100),
+    faculty    VARCHAR(20)
+);
+CREATE TABLE
+INSERT INTO students (name, email, faculty) VALUES
+('Alymbek', 'alymbek@example.com', 'COMSEH'),
+('Timur',   'timur@example.com',   'MED'),
+('Beka',    'beka@example.com',    'MAT');
+INSERT 0 3
+-- 1. SQL syntax: keywords in UPPERCASE, names in snake_case
+SELECT name, email FROM students WHERE faculty = 'COMSEH';
+  name   |        email        
+---------+---------------------
+ Alymbek | alymbek@example.com
+(1 row)
+
+-- 2. SELECT structure: SELECT columns FROM table
+SELECT name, email FROM students;
+  name   |        email        
+---------+---------------------
+ Alymbek | alymbek@example.com
+ Timur   | timur@example.com
+ Beka    | beka@example.com
+(3 rows)
+
+-- 3. First query: all columns and all rows
+SELECT * FROM students;
+ student_id |  name   |        email        | faculty 
+------------+---------+---------------------+---------
+          1 | Alymbek | alymbek@example.com | COMSEH
+          2 | Timur   | timur@example.com   | MED
+          3 | Beka    | beka@example.com    | MAT
+(3 rows)
+
+-- 4. Understanding the result set: each row is a record, each column a field
+SELECT student_id, faculty FROM students;
+ student_id | faculty 
+------------+---------
+          1 | COMSEH
+          2 | MED
+          3 | MAT
+(3 rows)
+
+-- 5. Filtering with WHERE
+SELECT name, email FROM students WHERE name = 'Timur';
+ name  |       email       
+-------+-------------------
+ Timur | timur@example.com
+(1 row)
+
+-- 6. Sorting with ORDER BY (ASC is the default)
+SELECT name, email FROM students ORDER BY name;
+  name   |        email        
+---------+---------------------
+ Alymbek | alymbek@example.com
+ Beka    | beka@example.com
+ Timur   | timur@example.com
+(3 rows)
+
+SELECT name, email FROM students ORDER BY name DESC;
+  name   |        email        
+---------+---------------------
+ Timur   | timur@example.com
+ Beka    | beka@example.com
+ Alymbek | alymbek@example.com
+(3 rows)
+
+-- 7. Limiting results with LIMIT (together with ORDER BY)
+SELECT name, email FROM students ORDER BY name LIMIT 2;
+  name   |        email        
+---------+---------------------
+ Alymbek | alymbek@example.com
+ Beka    | beka@example.com
+(2 rows)
+
+-- 8. Comments
+-- This query retrieves all students from the MED faculty.
+SELECT name, faculty FROM students WHERE faculty = 'MED';
+ name  | faculty 
+-------+---------
+ Timur | MED
+(1 row)
+
+/* This is a multi-line comment.
+   It can span multiple lines for detailed explanations. */
+SELECT COUNT(*) AS total_students FROM students;
+ total_students 
+----------------
+              3
+(1 row)
+
