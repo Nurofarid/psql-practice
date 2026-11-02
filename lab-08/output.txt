@@ -1,0 +1,446 @@
+$ psql -d fk_practice -a -f lab08_foreign_keys.sql
+-- Lab 08: Foreign Keys and Relationships
+-- Run with: bash run.sh   (creates a fresh fk_practice database)
+-- Contains 7 EXPECTED errors (marked below).
+-- 1. Creating foreign keys
+-- Method 1: inline constraint during table creation
+CREATE TABLE departments (
+    dept_id SERIAL PRIMARY KEY,
+    dept_name VARCHAR(100) NOT NULL,
+    location VARCHAR(100)
+);
+CREATE TABLE
+CREATE TABLE employees (
+    emp_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    dept_id INTEGER REFERENCES departments(dept_id)
+);
+CREATE TABLE
+-- Method 2: table-level constraint during creation
+DROP TABLE employees;
+DROP TABLE
+CREATE TABLE employees (
+    emp_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    dept_id INTEGER,
+    FOREIGN KEY (dept_id) REFERENCES departments(dept_id)
+);
+CREATE TABLE
+-- Method 3: adding a constraint to an existing table
+DROP TABLE employees;
+DROP TABLE
+CREATE TABLE employees (
+    emp_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    dept_id INTEGER
+);
+CREATE TABLE
+ALTER TABLE employees
+ADD CONSTRAINT fk_employee_department
+FOREIGN KEY (dept_id) REFERENCES departments(dept_id);
+ALTER TABLE
+-- Method 4: named constraint during table creation
+DROP TABLE employees;
+DROP TABLE
+CREATE TABLE employees (
+    emp_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    dept_id INTEGER,
+    CONSTRAINT fk_employee_department
+        FOREIGN KEY (dept_id) REFERENCES departments(dept_id)
+);
+CREATE TABLE
+\d employees
+                                       Table "public.employees"
+   Column   |         Type          | Collation | Nullable |                  Default                  
+------------+-----------------------+-----------+----------+-------------------------------------------
+ emp_id     | integer               |           | not null | nextval('employees_emp_id_seq'::regclass)
+ first_name | character varying(50) |           | not null | 
+ last_name  | character varying(50) |           | not null | 
+ dept_id    | integer               |           |          | 
+Indexes:
+    "employees_pkey" PRIMARY KEY, btree (emp_id)
+Foreign-key constraints:
+    "fk_employee_department" FOREIGN KEY (dept_id) REFERENCES departments(dept_id)
+
+-- 2. Referential integrity
+INSERT INTO departments (dept_name, location) VALUES
+    ('Engineering', 'Building A'),
+    ('Marketing', 'Building B'),
+    ('HR', 'Building C');
+INSERT 0 3
+INSERT INTO employees (first_name, last_name, dept_id) VALUES ('John', 'Smith', 1);
+INSERT 0 1
+-- EXPECTED ERROR: department 99 does not exist
+INSERT INTO employees (first_name, last_name, dept_id) VALUES ('Jane', 'Doe', 99);
+psql:lab08_foreign_keys.sql:60: ERROR:  insert or update on table "employees" violates foreign key constraint "fk_employee_department"
+DETAIL:  Key (dept_id)=(99) is not present in table "departments".
+-- EXPECTED ERROR: department 1 is still referenced by John
+DELETE FROM departments WHERE dept_id = 1;
+psql:lab08_foreign_keys.sql:62: ERROR:  update or delete on table "departments" violates foreign key constraint "fk_employee_department" on table "employees"
+DETAIL:  Key (dept_id)=(1) is still referenced from table "employees".
+-- 3. ON DELETE CASCADE: child rows are deleted with the parent
+DROP TABLE employees;
+DROP TABLE
+TRUNCATE departments RESTART IDENTITY;   -- reset the parent table for this test
+TRUNCATE TABLE
+INSERT INTO departments (dept_name, location) VALUES
+    ('Engineering', 'Building A'), ('Marketing', 'Building B'), ('HR', 'Building C');
+INSERT 0 3
+CREATE TABLE employees (
+    emp_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    dept_id INTEGER REFERENCES departments(dept_id) ON DELETE CASCADE
+);
+CREATE TABLE
+INSERT INTO employees (first_name, last_name, dept_id) VALUES
+    ('John', 'Smith', 1), ('Aida', 'Asanova', 1), ('Timur', 'Bekov', 2);
+INSERT 0 3
+DELETE FROM departments WHERE dept_id = 1;
+DELETE 1
+SELECT * FROM employees;
+ emp_id | first_name | last_name | dept_id 
+--------+------------+-----------+---------
+      3 | Timur      | Bekov     |       2
+(1 row)
+
+-- 4. ON DELETE SET NULL: child rows stay, their dept_id becomes NULL
+DROP TABLE employees;
+DROP TABLE
+TRUNCATE departments RESTART IDENTITY;   -- reset the parent table for this test
+TRUNCATE TABLE
+INSERT INTO departments (dept_name, location) VALUES
+    ('Engineering', 'Building A'), ('Marketing', 'Building B'), ('HR', 'Building C');
+INSERT 0 3
+CREATE TABLE employees (
+    emp_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    dept_id INTEGER REFERENCES departments(dept_id) ON DELETE SET NULL
+);
+CREATE TABLE
+INSERT INTO employees (first_name, last_name, dept_id) VALUES
+    ('John', 'Smith', 1), ('Aida', 'Asanova', 1), ('Timur', 'Bekov', 2);
+INSERT 0 3
+DELETE FROM departments WHERE dept_id = 1;
+DELETE 1
+SELECT * FROM employees;
+ emp_id | first_name | last_name | dept_id 
+--------+------------+-----------+---------
+      3 | Timur      | Bekov     |       2
+      1 | John       | Smith     |        
+      2 | Aida       | Asanova   |        
+(3 rows)
+
+-- 5. ON DELETE SET DEFAULT: child rows get the default value (0)
+DROP TABLE employees;
+DROP TABLE
+TRUNCATE departments RESTART IDENTITY;   -- reset the parent table for this test
+TRUNCATE TABLE
+INSERT INTO departments (dept_name, location) VALUES
+    ('Engineering', 'Building A'), ('Marketing', 'Building B'), ('HR', 'Building C');
+INSERT 0 3
+CREATE TABLE employees (
+    emp_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    dept_id INTEGER DEFAULT 0 REFERENCES departments(dept_id) ON DELETE SET DEFAULT
+);
+CREATE TABLE
+INSERT INTO employees (first_name, last_name, dept_id) VALUES
+    ('John', 'Smith', 1), ('Aida', 'Asanova', 1), ('Timur', 'Bekov', 2);
+INSERT 0 3
+-- EXPECTED ERROR: department 0 (the default) does not exist yet
+DELETE FROM departments WHERE dept_id = 1;
+psql:lab08_foreign_keys.sql:110: ERROR:  insert or update on table "employees" violates foreign key constraint "employees_dept_id_fkey"
+DETAIL:  Key (dept_id)=(0) is not present in table "departments".
+-- Fix: the default value must exist in the parent table
+INSERT INTO departments (dept_id, dept_name) VALUES (0, 'Unassigned');
+INSERT 0 1
+DELETE FROM departments WHERE dept_id = 1;
+DELETE 1
+SELECT * FROM employees;
+ emp_id | first_name | last_name | dept_id 
+--------+------------+-----------+---------
+      3 | Timur      | Bekov     |       2
+      1 | John       | Smith     |       0
+      2 | Aida       | Asanova   |       0
+(3 rows)
+
+-- 6. ON DELETE RESTRICT: the parent cannot be deleted while children exist
+DROP TABLE employees;
+DROP TABLE
+TRUNCATE departments RESTART IDENTITY;   -- reset the parent table for this test
+TRUNCATE TABLE
+INSERT INTO departments (dept_name, location) VALUES
+    ('Engineering', 'Building A'), ('Marketing', 'Building B'), ('HR', 'Building C');
+INSERT 0 3
+CREATE TABLE employees (
+    emp_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    dept_id INTEGER REFERENCES departments(dept_id) ON DELETE RESTRICT
+);
+CREATE TABLE
+INSERT INTO employees (first_name, last_name, dept_id) VALUES
+    ('John', 'Smith', 1), ('Aida', 'Asanova', 1), ('Timur', 'Bekov', 2);
+INSERT 0 3
+-- EXPECTED ERROR: department 1 still has employees
+DELETE FROM departments WHERE dept_id = 1;
+psql:lab08_foreign_keys.sql:131: ERROR:  update or delete on table "departments" violates RESTRICT setting of foreign key constraint "employees_dept_id_fkey" on table "employees"
+DETAIL:  Key (dept_id)=(1) is referenced from table "employees".
+-- Works: department 3 (HR) has no employees
+DELETE FROM departments WHERE dept_id = 3;
+DELETE 1
+-- 7. ON UPDATE CASCADE (combined with ON DELETE CASCADE)
+DROP TABLE employees;
+DROP TABLE
+TRUNCATE departments RESTART IDENTITY;   -- reset the parent table for this test
+TRUNCATE TABLE
+INSERT INTO departments (dept_name, location) VALUES
+    ('Engineering', 'Building A'), ('Marketing', 'Building B'), ('HR', 'Building C');
+INSERT 0 3
+CREATE TABLE employees (
+    emp_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    dept_id INTEGER REFERENCES departments(dept_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+);
+CREATE TABLE
+INSERT INTO employees (first_name, last_name, dept_id) VALUES
+    ('John', 'Smith', 1), ('Aida', 'Asanova', 1), ('Timur', 'Bekov', 2);
+INSERT 0 3
+UPDATE departments SET dept_id = 100 WHERE dept_id = 1;
+UPDATE 1
+SELECT * FROM employees;
+ emp_id | first_name | last_name | dept_id 
+--------+------------+-----------+---------
+      3 | Timur      | Bekov     |       2
+      1 | John       | Smith     |     100
+      2 | Aida       | Asanova   |     100
+(3 rows)
+
+-- 8. One-to-one: users <-> user_profiles (FOREIGN KEY + UNIQUE)
+CREATE TABLE users (
+    user_id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE
+CREATE TABLE user_profiles (
+    profile_id SERIAL PRIMARY KEY,
+    user_id INTEGER UNIQUE NOT NULL,
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    bio TEXT,
+    profile_picture_url VARCHAR(255),
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+CREATE TABLE
+INSERT INTO users (username, email) VALUES ('johndoe', 'john@example.com');
+INSERT 0 1
+INSERT INTO user_profiles (user_id, first_name, last_name, bio) VALUES
+    (1, 'John', 'Doe', 'Software developer passionate about databases');
+INSERT 0 1
+-- EXPECTED ERROR: user 1 already has a profile
+INSERT INTO user_profiles (user_id, first_name, last_name) VALUES (1, 'Jane', 'Smith');
+psql:lab08_foreign_keys.sql:173: ERROR:  duplicate key value violates unique constraint "user_profiles_user_id_key"
+DETAIL:  Key (user_id)=(1) already exists.
+-- Alternative one-to-one: sharing the same primary key
+DROP TABLE user_profiles;
+DROP TABLE
+CREATE TABLE user_profiles (
+    user_id INTEGER PRIMARY KEY,
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    bio TEXT,
+    profile_picture_url VARCHAR(255),
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+CREATE TABLE
+INSERT INTO user_profiles (user_id, first_name, last_name, bio) VALUES
+    (1, 'John', 'Doe', 'Software developer passionate about databases');
+INSERT 0 1
+-- EXPECTED ERROR: user 1 already has a profile
+INSERT INTO user_profiles (user_id, first_name, last_name) VALUES (1, 'Jane', 'Smith');
+psql:lab08_foreign_keys.sql:188: ERROR:  duplicate key value violates unique constraint "user_profiles_pkey"
+DETAIL:  Key (user_id)=(1) already exists.
+-- Deleting the user also deletes the profile (ON DELETE CASCADE)
+DELETE FROM users WHERE user_id = 1;
+DELETE 1
+SELECT * FROM user_profiles;
+ user_id | first_name | last_name | bio | profile_picture_url 
+---------+------------+-----------+-----+---------------------
+(0 rows)
+
+-- 9. One-to-many: departments -> employees
+DROP TABLE employees;
+DROP TABLE
+DROP TABLE departments;
+DROP TABLE
+CREATE TABLE departments (
+    dept_id SERIAL PRIMARY KEY,
+    dept_name VARCHAR(100) NOT NULL,
+    manager_name VARCHAR(100),
+    budget DECIMAL(10,2)
+);
+CREATE TABLE
+CREATE TABLE employees (
+    emp_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    position VARCHAR(100),
+    salary DECIMAL(10,2),
+    hire_date DATE DEFAULT CURRENT_DATE,
+    dept_id INTEGER NOT NULL,
+    FOREIGN KEY (dept_id) REFERENCES departments(dept_id) ON DELETE RESTRICT
+);
+CREATE TABLE
+INSERT INTO departments (dept_name, manager_name, budget) VALUES
+    ('Engineering', 'Alice Johnson', 500000.00),
+    ('Marketing', 'Bob Wilson', 200000.00);
+INSERT 0 2
+INSERT INTO employees (first_name, last_name, position, salary, dept_id) VALUES
+    ('John', 'Smith', 'Software Engineer', 75000.00, 1),
+    ('Jane', 'Doe', 'Senior Developer', 85000.00, 1),
+    ('Mike', 'Brown', 'DevOps Engineer', 80000.00, 1),
+    ('Sarah', 'Davis', 'Marketing Specialist', 55000.00, 2);
+INSERT 0 4
+SELECT d.dept_name, e.first_name, e.last_name, e.position
+FROM departments d
+JOIN employees e ON d.dept_id = e.dept_id
+ORDER BY d.dept_name, e.last_name;
+  dept_name  | first_name | last_name |       position       
+-------------+------------+-----------+----------------------
+ Engineering | Mike       | Brown     | DevOps Engineer
+ Engineering | Jane       | Doe       | Senior Developer
+ Engineering | John       | Smith     | Software Engineer
+ Marketing   | Sarah      | Davis     | Marketing Specialist
+(4 rows)
+
+-- 10. One-to-many: blog_posts -> comments
+CREATE TABLE blog_posts (
+    post_id SERIAL PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    content TEXT,
+    author VARCHAR(100),
+    published_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE
+CREATE TABLE comments (
+    comment_id SERIAL PRIMARY KEY,
+    post_id INTEGER NOT NULL,
+    commenter_name VARCHAR(100),
+    comment_text TEXT NOT NULL,
+    comment_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (post_id) REFERENCES blog_posts(post_id) ON DELETE CASCADE
+);
+CREATE TABLE
+INSERT INTO blog_posts (title, author) VALUES ('My first post', 'Nuri'), ('Learning SQL', 'Nuri');
+INSERT 0 2
+INSERT INTO comments (post_id, commenter_name, comment_text) VALUES
+    (1, 'Aida', 'Great post!'), (1, 'Timur', 'Thanks for sharing'), (2, 'Beka', 'Very useful');
+INSERT 0 3
+-- Deleting a post deletes its comments (ON DELETE CASCADE)
+DELETE FROM blog_posts WHERE post_id = 1;
+DELETE 1
+SELECT comment_id, post_id, commenter_name, comment_text FROM comments;
+ comment_id | post_id | commenter_name | comment_text 
+------------+---------+----------------+--------------
+          3 |       2 | Beka           | Very useful
+(1 row)
+
+-- 11. Many-to-many: students <-> courses via the junction table student_enrollments
+CREATE TABLE students (
+    student_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    email VARCHAR(100) UNIQUE,
+    enrollment_date DATE DEFAULT CURRENT_DATE
+);
+CREATE TABLE
+CREATE TABLE courses (
+    course_id SERIAL PRIMARY KEY,
+    course_code VARCHAR(10) UNIQUE NOT NULL,
+    course_name VARCHAR(100) NOT NULL,
+    credits INTEGER NOT NULL,
+    instructor VARCHAR(100)
+);
+CREATE TABLE
+CREATE TABLE student_enrollments (
+    enrollment_id SERIAL PRIMARY KEY,
+    student_id INTEGER NOT NULL,
+    course_id INTEGER NOT NULL,
+    enrollment_date DATE DEFAULT CURRENT_DATE,
+    grade CHAR(2),
+    FOREIGN KEY (student_id) REFERENCES students(student_id) ON DELETE CASCADE,
+    FOREIGN KEY (course_id) REFERENCES courses(course_id) ON DELETE CASCADE,
+    UNIQUE (student_id, course_id)
+);
+CREATE TABLE
+INSERT INTO students (first_name, last_name, email) VALUES
+    ('Alice', 'Johnson', 'alice@university.edu'),
+    ('Bob', 'Smith', 'bob@university.edu'),
+    ('Carol', 'Wilson', 'carol@university.edu');
+INSERT 0 3
+INSERT INTO courses (course_code, course_name, credits, instructor) VALUES
+    ('CS101', 'Introduction to Programming', 3, 'Dr. Brown'),
+    ('CS201', 'Data Structures', 4, 'Dr. Davis'),
+    ('MATH101', 'Calculus I', 4, 'Dr. Wilson');
+INSERT 0 3
+INSERT INTO student_enrollments (student_id, course_id, grade) VALUES
+    (1, 1, 'A'), (1, 2, 'B+'), (2, 1, 'A-'), (2, 3, 'B'), (3, 2, 'A'), (3, 3, 'A-');
+INSERT 0 6
+-- All enrollments
+SELECT s.first_name || ' ' || s.last_name AS student_name,
+       c.course_code, c.course_name, se.grade, se.enrollment_date
+FROM students s
+JOIN student_enrollments se ON s.student_id = se.student_id
+JOIN courses c ON se.course_id = c.course_id
+ORDER BY s.last_name, c.course_code;
+ student_name  | course_code |         course_name         | grade | enrollment_date 
+---------------+-------------+-----------------------------+-------+-----------------
+ Alice Johnson | CS101       | Introduction to Programming | A     | 2026-11-02
+ Alice Johnson | CS201       | Data Structures             | B+    | 2026-11-02
+ Bob Smith     | CS101       | Introduction to Programming | A-    | 2026-11-02
+ Bob Smith     | MATH101     | Calculus I                  | B     | 2026-11-02
+ Carol Wilson  | CS201       | Data Structures             | A     | 2026-11-02
+ Carol Wilson  | MATH101     | Calculus I                  | A-    | 2026-11-02
+(6 rows)
+
+-- All students in a specific course
+SELECT s.first_name, s.last_name, se.grade
+FROM students s
+JOIN student_enrollments se ON s.student_id = se.student_id
+JOIN courses c ON se.course_id = c.course_id
+WHERE c.course_code = 'CS101';
+ first_name | last_name | grade 
+------------+-----------+-------
+ Alice      | Johnson   | A 
+ Bob        | Smith     | A-
+(2 rows)
+
+-- All courses for a specific student
+SELECT c.course_code, c.course_name, c.credits, se.grade
+FROM courses c
+JOIN student_enrollments se ON c.course_id = se.course_id
+JOIN students s ON se.student_id = s.student_id
+WHERE s.email = 'alice@university.edu';
+ course_code |         course_name         | credits | grade 
+-------------+-----------------------------+---------+-------
+ CS101       | Introduction to Programming |       3 | A 
+ CS201       | Data Structures             |       4 | B+
+(2 rows)
+
+-- EXPECTED ERROR: Alice is already enrolled in CS101 (UNIQUE)
+INSERT INTO student_enrollments (student_id, course_id, grade) VALUES (1, 1, 'C');
+psql:lab08_foreign_keys.sql:303: ERROR:  duplicate key value violates unique constraint "student_enrollments_student_id_course_id_key"
+DETAIL:  Key (student_id, course_id)=(1, 1) already exists.
