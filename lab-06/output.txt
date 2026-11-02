@@ -1,0 +1,171 @@
+$ psql -d university -a -f lab06_tables.sql
+-- Lab 06: Tables, Data Types and Constraints
+-- Run with: bash run.sh   (uses the "university" database from Lab 05)
+-- Contains 6 EXPECTED errors (marked below).
+-- 1. CREATE TABLE: name, columns, data types, constraints
+CREATE TABLE students (
+    student_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name  VARCHAR(50) NOT NULL,
+    email      VARCHAR(100) UNIQUE NOT NULL,
+    faculty    VARCHAR(100)
+);
+CREATE TABLE
+\d students
+                                          Table "public.students"
+   Column   |          Type          | Collation | Nullable |                   Default                    
+------------+------------------------+-----------+----------+----------------------------------------------
+ student_id | integer                |           | not null | nextval('students_student_id_seq'::regclass)
+ first_name | character varying(50)  |           | not null | 
+ last_name  | character varying(50)  |           | not null | 
+ email      | character varying(100) |           | not null | 
+ faculty    | character varying(100) |           |          | 
+Indexes:
+    "students_pkey" PRIMARY KEY, btree (student_id)
+    "students_email_key" UNIQUE CONSTRAINT, btree (email)
+
+INSERT INTO students (first_name, last_name, email, faculty) VALUES
+('Alymbek', 'Asanov', 'alymbek@auca.kg', 'Software Engineering'),
+('Timur',   'Bekov',  'timur@auca.kg',   'Applied Mathematics');
+INSERT 0 2
+SELECT * FROM students;
+ student_id | first_name | last_name |      email      |       faculty        
+------------+------------+-----------+-----------------+----------------------
+          1 | Alymbek    | Asanov    | alymbek@auca.kg | Software Engineering
+          2 | Timur      | Bekov     | timur@auca.kg   | Applied Mathematics
+(2 rows)
+
+-- 2. Constraints protect the data
+-- EXPECTED ERROR: NOT NULL (last_name is required)
+INSERT INTO students (first_name, last_name, email) VALUES ('Beka', NULL, 'beka@auca.kg');
+psql:lab06_tables.sql:22: ERROR:  null value in column "last_name" of relation "students" violates not-null constraint
+DETAIL:  Failing row contains (3, Beka, null, beka@auca.kg, null).
+-- EXPECTED ERROR: UNIQUE (this email is already used)
+INSERT INTO students (first_name, last_name, email) VALUES ('Beka', 'Osmonov', 'timur@auca.kg');
+psql:lab06_tables.sql:24: ERROR:  duplicate key value violates unique constraint "students_email_key"
+DETAIL:  Key (email)=(timur@auca.kg) already exists.
+-- 3. More data types + CHECK and FOREIGN KEY
+CREATE TABLE enrollments (
+    enrollment_id SERIAL PRIMARY KEY,                                 -- auto-incrementing integer
+    student_id    INTEGER REFERENCES students(student_id),            -- FOREIGN KEY
+    course_name   TEXT NOT NULL,                                      -- text without a length limit
+    grade         INTEGER CHECK (grade >= 0 AND grade <= 100),        -- CHECK
+    is_active     BOOLEAN DEFAULT TRUE,                               -- true / false
+    enrolled_on   DATE,                                               -- date
+    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,                -- date and time
+    credits_total BIGINT                                              -- large whole number
+);
+CREATE TABLE
+INSERT INTO enrollments (student_id, course_name, grade, enrolled_on, credits_total)
+VALUES (1, 'Databases', 95, '2026-09-01', 6);
+INSERT 0 1
+SELECT enrollment_id, student_id, course_name, grade, is_active, enrolled_on FROM enrollments;
+ enrollment_id | student_id | course_name | grade | is_active | enrolled_on 
+---------------+------------+-------------+-------+-----------+-------------
+             1 |          1 | Databases   |    95 | t         | 2026-09-01
+(1 row)
+
+-- EXPECTED ERROR: CHECK (grade must be between 0 and 100)
+INSERT INTO enrollments (student_id, course_name, grade) VALUES (1, 'Statistics', 150);
+psql:lab06_tables.sql:41: ERROR:  new row for relation "enrollments" violates check constraint "enrollments_grade_check"
+DETAIL:  Failing row contains (2, 1, Statistics, 150, t, null, 2026-11-02 23:27:16.196036, null).
+-- EXPECTED ERROR: FOREIGN KEY (student 99 does not exist)
+INSERT INTO enrollments (student_id, course_name, grade) VALUES (99, 'Statistics', 80);
+psql:lab06_tables.sql:43: ERROR:  insert or update on table "enrollments" violates foreign key constraint "enrollments_student_id_fkey"
+DETAIL:  Key (student_id)=(99) is not present in table "students".
+-- 4. DROP TABLE
+-- EXPECTED ERROR: the table does not exist
+DROP TABLE non_existing_table;
+psql:lab06_tables.sql:47: ERROR:  table "non_existing_table" does not exist
+-- With IF EXISTS: only a NOTICE, no error
+DROP TABLE IF EXISTS non_existing_table;
+psql:lab06_tables.sql:49: NOTICE:  table "non_existing_table" does not exist, skipping
+DROP TABLE
+-- 5. ALTER TABLE: change the structure without recreating the table
+-- 5.1 Adding a column
+ALTER TABLE students
+ADD COLUMN date_of_birth DATE;
+ALTER TABLE
+-- 5.2 Dropping a column
+ALTER TABLE students
+DROP COLUMN faculty;
+ALTER TABLE
+-- 5.3 Changing a column's data type
+ALTER TABLE students
+ALTER COLUMN first_name TYPE TEXT;
+ALTER TABLE
+-- 5.4 Adding a constraint
+ALTER TABLE students
+ADD CONSTRAINT unique_student_email UNIQUE (email);
+ALTER TABLE
+-- 5.5 Renaming a column and the table
+ALTER TABLE students
+RENAME COLUMN email TO email_address;
+ALTER TABLE
+ALTER TABLE students
+RENAME TO university_students;
+ALTER TABLE
+\d university_students
+                                      Table "public.university_students"
+    Column     |          Type          | Collation | Nullable |                   Default                    
+---------------+------------------------+-----------+----------+----------------------------------------------
+ student_id    | integer                |           | not null | nextval('students_student_id_seq'::regclass)
+ first_name    | text                   |           | not null | 
+ last_name     | character varying(50)  |           | not null | 
+ email_address | character varying(100) |           | not null | 
+ date_of_birth | date                   |           |          | 
+Indexes:
+    "students_pkey" PRIMARY KEY, btree (student_id)
+    "students_email_key" UNIQUE CONSTRAINT, btree (email_address)
+    "unique_student_email" UNIQUE CONSTRAINT, btree (email_address)
+Referenced by:
+    TABLE "enrollments" CONSTRAINT "enrollments_student_id_fkey" FOREIGN KEY (student_id) REFERENCES university_students(student_id)
+
+-- The foreign key in enrollments followed the renamed table automatically
+\d enrollments
+                                               Table "public.enrollments"
+    Column     |            Type             | Collation | Nullable |                      Default                       
+---------------+-----------------------------+-----------+----------+----------------------------------------------------
+ enrollment_id | integer                     |           | not null | nextval('enrollments_enrollment_id_seq'::regclass)
+ student_id    | integer                     |           |          | 
+ course_name   | text                        |           | not null | 
+ grade         | integer                     |           |          | 
+ is_active     | boolean                     |           |          | true
+ enrolled_on   | date                        |           |          | 
+ created_at    | timestamp without time zone |           |          | CURRENT_TIMESTAMP
+ credits_total | bigint                      |           |          | 
+Indexes:
+    "enrollments_pkey" PRIMARY KEY, btree (enrollment_id)
+Check constraints:
+    "enrollments_grade_check" CHECK (grade >= 0 AND grade <= 100)
+Foreign-key constraints:
+    "enrollments_student_id_fkey" FOREIGN KEY (student_id) REFERENCES university_students(student_id)
+
+-- 6. Temporary table: exists only during the current session
+CREATE TEMP TABLE temp_scores (student_name VARCHAR(50), score INTEGER);
+CREATE TABLE
+INSERT INTO temp_scores VALUES ('Timur', 88), ('Alymbek', 92);
+INSERT 0 2
+SELECT * FROM temp_scores;
+ student_name | score 
+--------------+-------
+ Timur        |    88
+ Alymbek      |    92
+(2 rows)
+
+-- Reconnect = start a new session
+\c university
+You are now connected to database "university" as user "nurofaridkukanbekova".
+-- EXPECTED ERROR: the temporary table was dropped when the session ended
+SELECT * FROM temp_scores;
+psql:lab06_tables.sql:81: ERROR:  relation "temp_scores" does not exist
+LINE 1: SELECT * FROM temp_scores;
+                      ^
+\dt
+                       List of tables
+ Schema |        Name         | Type  |        Owner         
+--------+---------------------+-------+----------------------
+ public | enrollments         | table | nurofaridkukanbekova
+ public | university_students | table | nurofaridkukanbekova
+(2 rows)
+
