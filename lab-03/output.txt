@@ -1,0 +1,106 @@
+$ psql --version
+psql (PostgreSQL) 18.6 (Homebrew)
+
+$ psql -h localhost -p 5432 -U nurofaridkukanbekova -d lab03_psql -c "SELECT current_user, current_database(), inet_server_port();"
+     current_user     | current_database | inet_server_port 
+----------------------+------------------+------------------
+ nurofaridkukanbekova | lab03_psql       |             5432
+(1 row)
+
+$ psql -d lab03_psql -a -f lab03_basic_psql.sql
+-- Lab 03: Basic psql Commands
+-- Run with: psql -d lab03_psql -f lab03_basic_psql.sql
+-- 1. Meta-commands: look around
+\l
+                                                                          List of databases
+      Name       |        Owner         | Encoding | Locale Provider |   Collate   |    Ctype    | Locale | ICU Rules |               Access privileges               
+-----------------+----------------------+----------+-----------------+-------------+-------------+--------+-----------+-----------------------------------------------
+ data_ops        | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ design_practice | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ fk_practice     | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ lab03_psql      | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ pk_practice     | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ postgres        | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ practice        | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ template0       | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | =c/nurofaridkukanbekova                      +
+                 |                      |          |                 |             |             |        |           | nurofaridkukanbekova=CTc/nurofaridkukanbekova
+ template1       | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | =c/nurofaridkukanbekova                      +
+                 |                      |          |                 |             |             |        |           | nurofaridkukanbekova=CTc/nurofaridkukanbekova
+ university      | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+(10 rows)
+
+\conninfo
+           Connection Information
+      Parameter       |        Value         
+----------------------+----------------------
+ Database             | lab03_psql
+ Client User          | nurofaridkukanbekova
+ Socket Directory     | /tmp
+ Server Port          | 5432
+ Options              | 
+ Protocol Version     | 3.0
+ Password Used        | false
+ GSSAPI Authenticated | false
+ Backend PID          | 8210
+ SSL Connection       | false
+ Superuser            | on
+ Hot Standby          | off
+(12 rows)
+
+-- The new database is empty, so \dt finds no tables yet
+\dt
+psql:lab03_basic_psql.sql:8: error: Did not find any tables.
+-- 2. Connect to a database
+\c lab03_psql
+You are now connected to database "lab03_psql" as user "nurofaridkukanbekova".
+-- 3. Create a table
+CREATE TABLE students (
+    id   SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    age  INT
+);
+CREATE TABLE
+-- 4. List tables and describe the new one
+\dt
+                  List of tables
+ Schema |   Name   | Type  |        Owner         
+--------+----------+-------+----------------------
+ public | students | table | nurofaridkukanbekova
+(1 row)
+
+\d students
+                                    Table "public.students"
+ Column |          Type          | Collation | Nullable |               Default                
+--------+------------------------+-----------+----------+--------------------------------------
+ id     | integer                |           | not null | nextval('students_id_seq'::regclass)
+ name   | character varying(100) |           |          | 
+ age    | integer                |           |          | 
+Indexes:
+    "students_pkey" PRIMARY KEY, btree (id)
+
+-- 5. Insert data
+INSERT INTO students (name, age) VALUES ('Alice', 21), ('Bob', 23);
+INSERT 0 2
+-- 6. Select data
+SELECT * FROM students;
+ id | name  | age 
+----+-------+-----
+  1 | Alice |  21
+  2 | Bob   |  23
+(2 rows)
+
+-- 7. Help on an SQL command
+\h DROP TABLE
+Command:     DROP TABLE
+Description: remove a table
+Syntax:
+DROP TABLE [ IF EXISTS ] name [, ...] [ CASCADE | RESTRICT ]
+
+URL: https://www.postgresql.org/docs/18/sql-droptable.html
+
+-- 8. Delete the table
+DROP TABLE students;
+DROP TABLE
+-- 9. Check: the table is gone
+\d students
+psql:lab03_basic_psql.sql:37: error: Did not find any relation named "students".
