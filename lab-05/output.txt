@@ -1,0 +1,82 @@
+$ psql -d postgres -a -f lab05_databases.sql
+-- Lab 05: Databases
+-- Run with: bash run.sh   (it removes leftovers from earlier runs first)
+-- Contains 3 EXPECTED errors (marked below).
+-- 1. CREATE DATABASE
+CREATE DATABASE university;
+CREATE DATABASE
+\l university
+                                                          List of databases
+    Name    |        Owner         | Encoding | Locale Provider |   Collate   |    Ctype    | Locale | ICU Rules | Access privileges 
+------------+----------------------+----------+-----------------+-------------+-------------+--------+-----------+-------------------
+ university | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+(1 row)
+
+-- 2. Switching between databases with \c
+\c university
+You are now connected to database "university" as user "nurofaridkukanbekova".
+SELECT current_database();
+ current_database 
+------------------
+ university
+(1 row)
+
+-- 3. EXPECTED ERROR: a database cannot be dropped while you are connected to it
+DROP DATABASE university;
+psql:lab05_databases.sql:14: ERROR:  cannot drop the currently open database
+-- 4. Connect to another database, then DROP DATABASE works
+\c postgres
+You are now connected to database "postgres" as user "nurofaridkukanbekova".
+DROP DATABASE university;
+DROP DATABASE
+\l university
+                                          List of databases
+ Name | Owner | Encoding | Locale Provider | Collate | Ctype | Locale | ICU Rules | Access privileges 
+------+-------+----------+-----------------+---------+-------+--------+-----------+-------------------
+(0 rows)
+
+-- 5. Naming conventions
+-- Good: lowercase snake_case
+CREATE DATABASE student_records;
+CREATE DATABASE
+-- Unquoted names are folded to lowercase: StudentDB becomes studentdb
+CREATE DATABASE StudentDB;
+CREATE DATABASE
+-- With double quotes the capital letters are kept, and the name must then always be quoted
+CREATE DATABASE "StudentDB";
+CREATE DATABASE
+\l *tudent*
+                                                            List of databases
+      Name       |        Owner         | Encoding | Locale Provider |   Collate   |    Ctype    | Locale | ICU Rules | Access privileges 
+-----------------+----------------------+----------+-----------------+-------------+-------------+--------+-----------+-------------------
+ StudentDB       | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ student_records | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ studentdb       | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+(3 rows)
+
+-- EXPECTED ERROR: spaces are not allowed in unquoted names
+CREATE DATABASE course management;
+psql:lab05_databases.sql:30: ERROR:  syntax error at or near ";"
+LINE 1: CREATE DATABASE course management;
+                                         ^
+-- EXPECTED ERROR: reserved keywords cannot be used as names
+CREATE DATABASE select;
+psql:lab05_databases.sql:32: ERROR:  syntax error at or near "select"
+LINE 1: CREATE DATABASE select;
+                        ^
+-- Clean up
+DROP DATABASE student_records;
+DROP DATABASE
+DROP DATABASE studentdb;
+DROP DATABASE
+DROP DATABASE "StudentDB";
+DROP DATABASE
+
+$ psql -d postgres -c "CREATE DATABASE university;"
+CREATE DATABASE
+$ psql -d university -c "SELECT current_database();"     # connect directly from the terminal
+ current_database 
+------------------
+ university
+(1 row)
+
