@@ -1,0 +1,184 @@
+$ psql -d design_practice -a -f lab10_viewing_structure.sql
+-- Lab 10: Viewing Database and Table Structure
+-- Nurofarid Kukanbekova · AUCA · Databases
+-- Runs on design_practice (the database built in Lab 09)
+-- 1. \l: all databases on the server
+\l
+                                                                          List of databases
+      Name       |        Owner         | Encoding | Locale Provider |   Collate   |    Ctype    | Locale | ICU Rules |               Access privileges               
+-----------------+----------------------+----------+-----------------+-------------+-------------+--------+-----------+-----------------------------------------------
+ data_ops        | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ design_practice | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ fk_practice     | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ lab03_psql      | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ lab04_sql       | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ pk_practice     | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ postgres        | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ practice        | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+ template0       | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | =c/nurofaridkukanbekova                      +
+                 |                      |          |                 |             |             |        |           | nurofaridkukanbekova=CTc/nurofaridkukanbekova
+ template1       | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | =c/nurofaridkukanbekova                      +
+                 |                      |          |                 |             |             |        |           | nurofaridkukanbekova=CTc/nurofaridkukanbekova
+ university      | nurofaridkukanbekova | UTF8     | libc            | en_US.UTF-8 | en_US.UTF-8 |        |           | 
+(11 rows)
+
+-- 2. \dt: tables in the current database
+\dt
+                     List of tables
+ Schema |      Name      | Type  |        Owner         
+--------+----------------+-------+----------------------
+ public | authors        | table | nurofaridkukanbekova
+ public | book_authors   | table | nurofaridkukanbekova
+ public | books          | table | nurofaridkukanbekova
+ public | courses        | table | nurofaridkukanbekova
+ public | departments    | table | nurofaridkukanbekova
+ public | enrollments    | table | nurofaridkukanbekova
+ public | loans          | table | nurofaridkukanbekova
+ public | members        | table | nurofaridkukanbekova
+ public | professors     | table | nurofaridkukanbekova
+ public | student_phones | table | nurofaridkukanbekova
+ public | students       | table | nurofaridkukanbekova
+(11 rows)
+
+-- \dt+ also shows size and access method
+\dt+
+                                                 List of tables
+ Schema |      Name      | Type  |        Owner         | Persistence | Access method |    Size    | Description 
+--------+----------------+-------+----------------------+-------------+---------------+------------+-------------
+ public | authors        | table | nurofaridkukanbekova | permanent   | heap          | 8192 bytes | 
+ public | book_authors   | table | nurofaridkukanbekova | permanent   | heap          | 8192 bytes | 
+ public | books          | table | nurofaridkukanbekova | permanent   | heap          | 8192 bytes | 
+ public | courses        | table | nurofaridkukanbekova | permanent   | heap          | 8192 bytes | 
+ public | departments    | table | nurofaridkukanbekova | permanent   | heap          | 8192 bytes | 
+ public | enrollments    | table | nurofaridkukanbekova | permanent   | heap          | 8192 bytes | 
+ public | loans          | table | nurofaridkukanbekova | permanent   | heap          | 8192 bytes | 
+ public | members        | table | nurofaridkukanbekova | permanent   | heap          | 8192 bytes | 
+ public | professors     | table | nurofaridkukanbekova | permanent   | heap          | 8192 bytes | 
+ public | student_phones | table | nurofaridkukanbekova | permanent   | heap          | 8192 bytes | 
+ public | students       | table | nurofaridkukanbekova | permanent   | heap          | 8192 bytes | 
+(11 rows)
+
+-- 3. \d students: columns, keys and who references this table
+\d students
+                         Table "public.students"
+    Column     |          Type          | Collation | Nullable | Default 
+---------------+------------------------+-----------+----------+---------
+ student_id    | integer                |           | not null | 
+ name          | character varying(100) |           |          | 
+ department_id | integer                |           |          | 
+Indexes:
+    "students_pkey" PRIMARY KEY, btree (student_id)
+Foreign-key constraints:
+    "students_department_id_fkey" FOREIGN KEY (department_id) REFERENCES departments(department_id)
+Referenced by:
+    TABLE "enrollments" CONSTRAINT "enrollments_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(student_id)
+    TABLE "student_phones" CONSTRAINT "student_phones_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(student_id)
+
+-- 4. \d loans: a table with defaults, NOT NULL and two foreign keys
+\d loans
+                                    Table "public.loans"
+   Column    |     Type      | Collation | Nullable |                Default                 
+-------------+---------------+-----------+----------+----------------------------------------
+ loan_id     | integer       |           | not null | nextval('loans_loan_id_seq'::regclass)
+ member_id   | integer       |           | not null | 
+ book_id     | integer       |           | not null | 
+ loan_date   | date          |           |          | CURRENT_DATE
+ due_date    | date          |           | not null | 
+ return_date | date          |           |          | 
+ late_fee    | numeric(10,2) |           |          | 0.00
+Indexes:
+    "loans_pkey" PRIMARY KEY, btree (loan_id)
+Foreign-key constraints:
+    "loans_book_id_fkey" FOREIGN KEY (book_id) REFERENCES books(book_id)
+    "loans_member_id_fkey" FOREIGN KEY (member_id) REFERENCES members(member_id)
+
+-- 5. \d+ books: extra detail (storage, statistics target, description)
+\d+ books
+                                                                      Table "public.books"
+      Column      |          Type          | Collation | Nullable |                Default                 | Storage  | Compression | Stats target | Description 
+------------------+------------------------+-----------+----------+----------------------------------------+----------+-------------+--------------+-------------
+ book_id          | integer                |           | not null | nextval('books_book_id_seq'::regclass) | plain    |             |              | 
+ title            | character varying(200) |           | not null |                                        | extended |             |              | 
+ isbn             | character varying(13)  |           |          |                                        | extended |             |              | 
+ publication_year | integer                |           |          |                                        | plain    |             |              | 
+ available_copies | integer                |           |          | 1                                      | plain    |             |              | 
+Indexes:
+    "books_pkey" PRIMARY KEY, btree (book_id)
+    "books_isbn_key" UNIQUE CONSTRAINT, btree (isbn)
+Referenced by:
+    TABLE "book_authors" CONSTRAINT "book_authors_book_id_fkey" FOREIGN KEY (book_id) REFERENCES books(book_id)
+    TABLE "loans" CONSTRAINT "loans_book_id_fkey" FOREIGN KEY (book_id) REFERENCES books(book_id)
+Not-null constraints:
+    "books_book_id_not_null" NOT NULL "book_id"
+    "books_title_not_null" NOT NULL "title"
+Access method: heap
+
+-- 6. \di and \ds: indexes and sequences created automatically
+\di
+                                List of indexes
+ Schema |         Name         | Type  |        Owner         |     Table      
+--------+----------------------+-------+----------------------+----------------
+ public | authors_pkey         | index | nurofaridkukanbekova | authors
+ public | book_authors_pkey    | index | nurofaridkukanbekova | book_authors
+ public | books_isbn_key       | index | nurofaridkukanbekova | books
+ public | books_pkey           | index | nurofaridkukanbekova | books
+ public | courses_pkey         | index | nurofaridkukanbekova | courses
+ public | departments_pkey     | index | nurofaridkukanbekova | departments
+ public | enrollments_pkey     | index | nurofaridkukanbekova | enrollments
+ public | loans_pkey           | index | nurofaridkukanbekova | loans
+ public | members_email_key    | index | nurofaridkukanbekova | members
+ public | members_pkey         | index | nurofaridkukanbekova | members
+ public | professors_email_key | index | nurofaridkukanbekova | professors
+ public | professors_pkey      | index | nurofaridkukanbekova | professors
+ public | student_phones_pkey  | index | nurofaridkukanbekova | student_phones
+ public | students_pkey        | index | nurofaridkukanbekova | students
+(14 rows)
+
+\ds
+                           List of sequences
+ Schema |            Name             |   Type   |        Owner         
+--------+-----------------------------+----------+----------------------
+ public | authors_author_id_seq       | sequence | nurofaridkukanbekova
+ public | books_book_id_seq           | sequence | nurofaridkukanbekova
+ public | loans_loan_id_seq           | sequence | nurofaridkukanbekova
+ public | members_member_id_seq       | sequence | nurofaridkukanbekova
+ public | professors_professor_id_seq | sequence | nurofaridkukanbekova
+(5 rows)
+
+-- 7. The same information with SQL (information_schema)
+SELECT column_name, data_type, is_nullable, column_default
+FROM information_schema.columns
+WHERE table_name = 'loans'
+ORDER BY ordinal_position;
+ column_name | data_type | is_nullable |             column_default             
+-------------+-----------+-------------+----------------------------------------
+ loan_id     | integer   | NO          | nextval('loans_loan_id_seq'::regclass)
+ member_id   | integer   | NO          | 
+ book_id     | integer   | NO          | 
+ loan_date   | date      | YES         | CURRENT_DATE
+ due_date    | date      | NO          | 
+ return_date | date      | YES         | 
+ late_fee    | numeric   | YES         | 0.00
+(7 rows)
+
+-- 8. Every foreign key in the database (the edges of the ER diagram)
+SELECT conrelid::regclass AS child_table,
+       conname AS constraint_name,
+       pg_get_constraintdef(oid) AS definition
+FROM pg_constraint
+WHERE contype = 'f'
+ORDER BY conrelid::regclass::text;
+  child_table   |        constraint_name         |                            definition                             
+----------------+--------------------------------+-------------------------------------------------------------------
+ book_authors   | book_authors_author_id_fkey    | FOREIGN KEY (author_id) REFERENCES authors(author_id)
+ book_authors   | book_authors_book_id_fkey      | FOREIGN KEY (book_id) REFERENCES books(book_id)
+ courses        | courses_professor_id_fkey      | FOREIGN KEY (professor_id) REFERENCES professors(professor_id)
+ enrollments    | enrollments_student_id_fkey    | FOREIGN KEY (student_id) REFERENCES students(student_id)
+ enrollments    | enrollments_course_id_fkey     | FOREIGN KEY (course_id) REFERENCES courses(course_id)
+ loans          | loans_book_id_fkey             | FOREIGN KEY (book_id) REFERENCES books(book_id)
+ loans          | loans_member_id_fkey           | FOREIGN KEY (member_id) REFERENCES members(member_id)
+ professors     | professors_department_id_fkey  | FOREIGN KEY (department_id) REFERENCES departments(department_id)
+ student_phones | student_phones_student_id_fkey | FOREIGN KEY (student_id) REFERENCES students(student_id)
+ students       | students_department_id_fkey    | FOREIGN KEY (department_id) REFERENCES departments(department_id)
+(10 rows)
+
