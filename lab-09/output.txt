@@ -1,0 +1,324 @@
+$ psql -d design_practice -a -f lab09_database_design.sql
+-- Lab 09: Database Design Basics
+-- Nurofarid Kukanbekova · AUCA · Databases
+-- Run in a fresh database: design_practice
+-- 1. 1NF violation: several phone numbers in one column
+CREATE TABLE students_bad (
+    student_id INT PRIMARY KEY,
+    name VARCHAR(100),
+    phone_numbers TEXT
+);
+CREATE TABLE
+INSERT INTO students_bad VALUES
+    (1, 'Alymbek', '0555-111-222, 0700-333-444'),
+    (2, 'Timur', '0777-555-666');
+INSERT 0 2
+SELECT * FROM students_bad;
+ student_id |  name   |       phone_numbers        
+------------+---------+----------------------------
+          1 | Alymbek | 0555-111-222, 0700-333-444
+          2 | Timur   | 0777-555-666
+(2 rows)
+
+-- searching for one number finds nothing, because it is hidden inside a list
+SELECT * FROM students_bad WHERE phone_numbers = '0700-333-444';
+ student_id | name | phone_numbers 
+------------+------+---------------
+(0 rows)
+
+DROP TABLE students_bad;
+DROP TABLE
+-- 2. 1NF fixed: one phone number per row in its own table
+CREATE TABLE students (
+    student_id INT PRIMARY KEY,
+    name VARCHAR(100)
+);
+CREATE TABLE
+CREATE TABLE student_phones (
+    student_id INT,
+    phone_number VARCHAR(15),
+    phone_type VARCHAR(20),
+    PRIMARY KEY (student_id, phone_number),
+    FOREIGN KEY (student_id) REFERENCES students(student_id)
+);
+CREATE TABLE
+INSERT INTO students VALUES (1, 'Alymbek'), (2, 'Timur');
+INSERT 0 2
+INSERT INTO student_phones VALUES
+    (1, '0555-111-222', 'mobile'),
+    (1, '0700-333-444', 'home'),
+    (2, '0777-555-666', 'mobile');
+INSERT 0 3
+SELECT * FROM student_phones WHERE phone_number = '0700-333-444';
+ student_id | phone_number | phone_type 
+------------+--------------+------------
+          1 | 0700-333-444 | home
+(1 row)
+
+-- 3. 2NF violation: course_name depends only on course_id (part of the key)
+CREATE TABLE enrollments_bad (
+    student_id INT,
+    course_id INT,
+    course_name VARCHAR(100),
+    grade CHAR(2),
+    PRIMARY KEY (student_id, course_id)
+);
+CREATE TABLE
+INSERT INTO enrollments_bad VALUES
+    (1, 101, 'Databases', 'A'),
+    (2, 101, 'Databases', 'B+');
+INSERT 0 2
+-- renaming the course in one row leaves the other row out of date
+UPDATE enrollments_bad SET course_name = 'Database Systems'
+WHERE student_id = 1 AND course_id = 101;
+UPDATE 1
+SELECT * FROM enrollments_bad;
+ student_id | course_id |   course_name    | grade 
+------------+-----------+------------------+-------
+          2 |       101 | Databases        | B+
+          1 |       101 | Database Systems | A 
+(2 rows)
+
+DROP TABLE enrollments_bad;
+DROP TABLE
+-- 4. 2NF fixed: course facts live in courses, enrollments keep only the grade
+CREATE TABLE courses (
+    course_id INT PRIMARY KEY,
+    course_name VARCHAR(100),
+    credits INT
+);
+CREATE TABLE
+CREATE TABLE enrollments (
+    student_id INT,
+    course_id INT,
+    grade CHAR(2),
+    PRIMARY KEY (student_id, course_id),
+    FOREIGN KEY (student_id) REFERENCES students(student_id),
+    FOREIGN KEY (course_id) REFERENCES courses(course_id)
+);
+CREATE TABLE
+INSERT INTO courses VALUES (101, 'Databases', 6), (102, 'Statistics', 4);
+INSERT 0 2
+INSERT INTO enrollments VALUES (1, 101, 'A'), (2, 101, 'B+'), (1, 102, 'A-');
+INSERT 0 3
+-- one UPDATE now renames the course everywhere
+UPDATE courses SET course_name = 'Database Systems' WHERE course_id = 101;
+UPDATE 1
+SELECT s.name, c.course_name, e.grade
+FROM enrollments e
+JOIN students s ON e.student_id = s.student_id
+JOIN courses c ON e.course_id = c.course_id;
+  name   |   course_name    | grade 
+---------+------------------+-------
+ Alymbek | Database Systems | A 
+ Timur   | Database Systems | B+
+ Alymbek | Statistics       | A-
+(3 rows)
+
+-- 5. 3NF violation: department_name depends on department_id, not on the student
+CREATE TABLE students_bad (
+    student_id INT PRIMARY KEY,
+    name VARCHAR(100),
+    department_id INT,
+    department_name VARCHAR(100)
+);
+CREATE TABLE
+INSERT INTO students_bad VALUES
+    (1, 'Alymbek', 10, 'Software Engineering'),
+    (2, 'Timur', 10, 'Software Engineering'),
+    (3, 'Beka', 10, 'Sofware Engineering');   -- typo: the same department now has two names
+INSERT 0 3
+SELECT * FROM students_bad;
+ student_id |  name   | department_id |   department_name    
+------------+---------+---------------+----------------------
+          1 | Alymbek |            10 | Software Engineering
+          2 | Timur   |            10 | Software Engineering
+          3 | Beka    |            10 | Sofware Engineering
+(3 rows)
+
+DROP TABLE students_bad;
+DROP TABLE
+-- 6. 3NF fixed: departments get their own table
+CREATE TABLE departments (
+    department_id INT PRIMARY KEY,
+    department_name VARCHAR(100),
+    department_head VARCHAR(100)
+);
+CREATE TABLE
+INSERT INTO departments VALUES
+    (10, 'Software Engineering', 'Dr. Asanov'),
+    (20, 'Business Administration', 'Dr. Bekova');
+INSERT 0 2
+ALTER TABLE students ADD COLUMN department_id INT REFERENCES departments(department_id);
+ALTER TABLE
+UPDATE students SET department_id = 10;
+UPDATE 2
+\d students
+                         Table "public.students"
+    Column     |          Type          | Collation | Nullable | Default 
+---------------+------------------------+-----------+----------+---------
+ student_id    | integer                |           | not null | 
+ name          | character varying(100) |           |          | 
+ department_id | integer                |           |          | 
+Indexes:
+    "students_pkey" PRIMARY KEY, btree (student_id)
+Foreign-key constraints:
+    "students_department_id_fkey" FOREIGN KEY (department_id) REFERENCES departments(department_id)
+Referenced by:
+    TABLE "enrollments" CONSTRAINT "enrollments_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(student_id)
+    TABLE "student_phones" CONSTRAINT "student_phones_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(student_id)
+
+SELECT s.name, d.department_name, d.department_head
+FROM students s
+JOIN departments d ON s.department_id = d.department_id;
+  name   |   department_name    | department_head 
+---------+----------------------+-----------------
+ Alymbek | Software Engineering | Dr. Asanov
+ Timur   | Software Engineering | Dr. Asanov
+(2 rows)
+
+-- 7. University ER model: professors TEACH courses (one-to-many)
+CREATE TABLE professors (
+    professor_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    email VARCHAR(100) UNIQUE,
+    department_id INT REFERENCES departments(department_id)
+);
+CREATE TABLE
+INSERT INTO professors (first_name, last_name, email, department_id) VALUES
+    ('Aibek', 'Toktogulov', 'aibek@university.kg', 10),
+    ('Gulnara', 'Isaeva', 'gulnara@university.kg', 20);
+INSERT 0 2
+ALTER TABLE courses ADD COLUMN professor_id INT REFERENCES professors(professor_id);
+ALTER TABLE
+UPDATE courses SET professor_id = 1 WHERE course_id = 101;
+UPDATE 1
+UPDATE courses SET professor_id = 2 WHERE course_id = 102;
+UPDATE 1
+SELECT c.course_name, p.first_name || ' ' || p.last_name AS professor
+FROM courses c
+JOIN professors p ON c.professor_id = p.professor_id;
+   course_name    |    professor     
+------------------+------------------
+ Database Systems | Aibek Toktogulov
+ Statistics       | Gulnara Isaeva
+(2 rows)
+
+\dt
+                     List of tables
+ Schema |      Name      | Type  |        Owner         
+--------+----------------+-------+----------------------
+ public | courses        | table | nurofaridkukanbekova
+ public | departments    | table | nurofaridkukanbekova
+ public | enrollments    | table | nurofaridkukanbekova
+ public | professors     | table | nurofaridkukanbekova
+ public | student_phones | table | nurofaridkukanbekova
+ public | students       | table | nurofaridkukanbekova
+(6 rows)
+
+-- a derived attribute is calculated, not stored: age comes from the birth date
+SELECT AGE(DATE '2003-05-14') AS age_today;
+        age_today        
+-------------------------
+ 23 years 5 mons 20 days
+(1 row)
+
+-- 8. Library system: tables (logical design)
+CREATE TABLE authors (
+    author_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    birth_date DATE
+);
+CREATE TABLE
+CREATE TABLE books (
+    book_id SERIAL PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    isbn VARCHAR(13) UNIQUE,
+    publication_year INTEGER,
+    available_copies INTEGER DEFAULT 1
+);
+CREATE TABLE
+CREATE TABLE book_authors (
+    book_id INTEGER,
+    author_id INTEGER,
+    PRIMARY KEY (book_id, author_id),
+    FOREIGN KEY (book_id) REFERENCES books(book_id),
+    FOREIGN KEY (author_id) REFERENCES authors(author_id)
+);
+CREATE TABLE
+CREATE TABLE members (
+    member_id SERIAL PRIMARY KEY,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    phone VARCHAR(15),
+    membership_date DATE DEFAULT CURRENT_DATE
+);
+CREATE TABLE
+CREATE TABLE loans (
+    loan_id SERIAL PRIMARY KEY,
+    member_id INTEGER NOT NULL,
+    book_id INTEGER NOT NULL,
+    loan_date DATE DEFAULT CURRENT_DATE,
+    due_date DATE NOT NULL,
+    return_date DATE,
+    late_fee DECIMAL(10,2) DEFAULT 0.00,
+    FOREIGN KEY (member_id) REFERENCES members(member_id),
+    FOREIGN KEY (book_id) REFERENCES books(book_id)
+);
+CREATE TABLE
+-- 9. Library system: data and queries
+INSERT INTO authors (first_name, last_name) VALUES
+    ('Chingiz', 'Aitmatov'), ('Abraham', 'Silberschatz'), ('Henry', 'Korth');
+INSERT 0 3
+INSERT INTO books (title, isbn, publication_year, available_copies) VALUES
+    ('Jamilia', '9780863564048', 1958, 3),
+    ('Database System Concepts', '9780078022159', 2019, 2);
+INSERT 0 2
+INSERT INTO book_authors VALUES (1, 1), (2, 2), (2, 3);
+INSERT 0 3
+INSERT INTO members (first_name, last_name, email) VALUES
+    ('Aida', 'Karimova', 'aida@example.com'),
+    ('Timur', 'Bekov', 'timur@example.com');
+INSERT 0 2
+INSERT INTO loans (member_id, book_id, loan_date, due_date, return_date) VALUES
+    (1, 1, '2026-09-01', '2026-09-15', '2026-09-14'),
+    (2, 2, '2026-09-20', '2026-10-04', NULL),
+    (1, 2, '2026-10-10', '2026-10-24', NULL);
+INSERT 0 3
+-- many-to-many: a book can have several authors
+SELECT b.title, a.first_name || ' ' || a.last_name AS author
+FROM books b
+JOIN book_authors ba ON b.book_id = ba.book_id
+JOIN authors a ON ba.author_id = a.author_id
+ORDER BY b.title;
+          title           |        author        
+--------------------------+----------------------
+ Database System Concepts | Abraham Silberschatz
+ Database System Concepts | Henry Korth
+ Jamilia                  | Chingiz Aitmatov
+(3 rows)
+
+-- overdue loans: not returned and past the due date
+SELECT m.first_name, b.title, l.due_date
+FROM loans l
+JOIN members m ON l.member_id = m.member_id
+JOIN books b ON l.book_id = b.book_id
+WHERE l.return_date IS NULL AND l.due_date < CURRENT_DATE;
+ first_name |          title           |  due_date  
+------------+--------------------------+------------
+ Timur      | Database System Concepts | 2026-10-04
+ Aida       | Database System Concepts | 2026-10-24
+(2 rows)
+
+-- 10. The design protects the data
+-- EXPECTED ERROR: the same author cannot be linked to the same book twice
+INSERT INTO book_authors VALUES (2, 2);
+psql:lab09_database_design.sql:199: ERROR:  duplicate key value violates unique constraint "book_authors_pkey"
+DETAIL:  Key (book_id, author_id)=(2, 2) already exists.
+-- EXPECTED ERROR: a loan cannot belong to a member who does not exist
+INSERT INTO loans (member_id, book_id, due_date) VALUES (99, 1, '2026-11-01');
+psql:lab09_database_design.sql:201: ERROR:  insert or update on table "loans" violates foreign key constraint "loans_member_id_fkey"
+DETAIL:  Key (member_id)=(99) is not present in table "members".
