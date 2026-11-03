@@ -1,0 +1,290 @@
+$ psql -d query_practice -a -f lab12_querying_data.sql
+-- Lab 12: Querying Data
+-- Nurofarid Kukanbekova · AUCA · Databases
+-- Run in a fresh database: query_practice
+-- 1. Sample data for this lab
+CREATE TABLE employees (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    department VARCHAR(30),
+    department_id INT,
+    salary NUMERIC(10,2),
+    email VARCHAR(100)
+);
+CREATE TABLE
+INSERT INTO employees (name, department, department_id, salary, email) VALUES
+    ('Aibek Sharshenov',     'Engineering', 3, 120000, 'aibek@company.kg'),
+    ('Ainura Toktomamatova', 'Sales',       5,  65000, 'ainura@company.kg'),
+    ('Bakyt Mamatov',        'Engineering', 3,  80000, 'bakyt@company.kg'),
+    ('Gulzat Sultanova',     'Marketing',   7,  55000, NULL),
+    ('Brandon Lee',          'Sales',       5,  90000, 'brandon@company.kg'),
+    ('Meerim Bekova',        'HR',          2,  48000, 'meerim@company.kg'),
+    ('Timur Asanov',         'Engineering', 3,  70000, NULL),
+    ('Aida Karimova',        'Marketing',   7, 102000, 'aida@company.kg');
+INSERT 0 8
+CREATE TABLE sales (
+    sale_id SERIAL PRIMARY KEY,
+    employee_id INT REFERENCES employees(id),
+    amount NUMERIC(10,2)
+);
+CREATE TABLE
+INSERT INTO sales (employee_id, amount) VALUES
+    (2, 1500), (2, 400), (5, 2500), (4, 800), (8, 1200);
+INSERT 0 5
+CREATE TABLE products (product_name VARCHAR(50), price NUMERIC(6,2));
+CREATE TABLE
+INSERT INTO products VALUES
+    ('Strawberry jam', 12.50), ('Blueberry yogurt', 24.00), ('Raspberry tea', 35.00),
+    ('Apple juice', 18.00), ('Mountain honey', 48.00), ('Cranberry juice', 55.00);
+INSERT 0 6
+CREATE TABLE customers (customer_name VARCHAR(50));
+CREATE TABLE
+INSERT INTO customers VALUES
+    ('Brad Johnson'), ('Brandon Kim'), ('bravo store'), ('Bakyt Usenov'), ('Aliya Rysbekova');
+INSERT 0 5
+CREATE TABLE users (email VARCHAR(100));
+CREATE TABLE
+INSERT INTO users VALUES
+    ('aibek@gmail.com'), ('AINURA@GMAIL.COM'), ('timur@mail.ru'),
+    ('meerim.bekova@auca.kg'), ('bad-email@'), ('no at sign.com');
+INSERT 0 6
+-- 2. SELECT: all columns, then only some columns
+SELECT * FROM employees;
+ id |         name         | department  | department_id |  salary   |       email        
+----+----------------------+-------------+---------------+-----------+--------------------
+  1 | Aibek Sharshenov     | Engineering |             3 | 120000.00 | aibek@company.kg
+  2 | Ainura Toktomamatova | Sales       |             5 |  65000.00 | ainura@company.kg
+  3 | Bakyt Mamatov        | Engineering |             3 |  80000.00 | bakyt@company.kg
+  4 | Gulzat Sultanova     | Marketing   |             7 |  55000.00 | 
+  5 | Brandon Lee          | Sales       |             5 |  90000.00 | brandon@company.kg
+  6 | Meerim Bekova        | HR          |             2 |  48000.00 | meerim@company.kg
+  7 | Timur Asanov         | Engineering |             3 |  70000.00 | 
+  8 | Aida Karimova        | Marketing   |             7 | 102000.00 | aida@company.kg
+(8 rows)
+
+SELECT name, department FROM employees;
+         name         | department  
+----------------------+-------------
+ Aibek Sharshenov     | Engineering
+ Ainura Toktomamatova | Sales
+ Bakyt Mamatov        | Engineering
+ Gulzat Sultanova     | Marketing
+ Brandon Lee          | Sales
+ Meerim Bekova        | HR
+ Timur Asanov         | Engineering
+ Aida Karimova        | Marketing
+(8 rows)
+
+-- 3. Calculations and aliases with AS
+SELECT name, salary, salary * 0.10 AS potential_bonus
+FROM employees;
+         name         |  salary   | potential_bonus 
+----------------------+-----------+-----------------
+ Aibek Sharshenov     | 120000.00 |      12000.0000
+ Ainura Toktomamatova |  65000.00 |       6500.0000
+ Bakyt Mamatov        |  80000.00 |       8000.0000
+ Gulzat Sultanova     |  55000.00 |       5500.0000
+ Brandon Lee          |  90000.00 |       9000.0000
+ Meerim Bekova        |  48000.00 |       4800.0000
+ Timur Asanov         |  70000.00 |       7000.0000
+ Aida Karimova        | 102000.00 |      10200.0000
+(8 rows)
+
+-- EXPECTED ERROR: an alias from SELECT cannot be used in WHERE (WHERE runs first)
+SELECT name, salary * 0.10 AS potential_bonus
+FROM employees
+WHERE potential_bonus > 8000;
+psql:lab12_querying_data.sql:52: ERROR:  column "potential_bonus" does not exist
+LINE 3: WHERE potential_bonus > 8000;
+              ^
+-- 4. WHERE: comparison, AND/OR/NOT, BETWEEN, IS NULL
+SELECT name, salary FROM employees WHERE department = 'Sales';
+         name         |  salary  
+----------------------+----------
+ Ainura Toktomamatova | 65000.00
+ Brandon Lee          | 90000.00
+(2 rows)
+
+SELECT name FROM employees WHERE salary > 75000 AND department = 'Engineering';
+       name       
+------------------
+ Aibek Sharshenov
+ Bakyt Mamatov
+(2 rows)
+
+SELECT name, department FROM employees
+WHERE department = 'HR' OR NOT salary < 100000;
+       name       | department  
+------------------+-------------
+ Aibek Sharshenov | Engineering
+ Meerim Bekova    | HR
+ Aida Karimova    | Marketing
+(3 rows)
+
+SELECT product_name, price FROM products WHERE price BETWEEN 20 AND 50;
+   product_name   | price 
+------------------+-------
+ Blueberry yogurt | 24.00
+ Raspberry tea    | 35.00
+ Mountain honey   | 48.00
+(3 rows)
+
+SELECT name FROM employees WHERE email IS NULL;
+       name       
+------------------
+ Gulzat Sultanova
+ Timur Asanov
+(2 rows)
+
+-- 5. Pattern matching: LIKE (case-sensitive) and ILIKE (case-insensitive)
+SELECT customer_name FROM customers WHERE customer_name LIKE 'Bra%';
+ customer_name 
+---------------
+ Brad Johnson
+ Brandon Kim
+(2 rows)
+
+SELECT customer_name FROM customers WHERE customer_name ILIKE 'bra%';
+ customer_name 
+---------------
+ Brad Johnson
+ Brandon Kim
+ bravo store
+(3 rows)
+
+SELECT product_name FROM products WHERE product_name LIKE '%berry%';
+   product_name   
+------------------
+ Strawberry jam
+ Blueberry yogurt
+ Raspberry tea
+ Cranberry juice
+(4 rows)
+
+SELECT email FROM users WHERE email ILIKE '%@gmail.com';
+      email       
+------------------
+ aibek@gmail.com
+ AINURA@GMAIL.COM
+(2 rows)
+
+-- _ is exactly one character: four-letter first names
+SELECT name FROM employees WHERE name LIKE '____ %';
+     name      
+---------------
+ Aida Karimova
+(1 row)
+
+-- 6. Regular expressions: ~  ~*  !~
+SELECT name FROM employees WHERE name ~ '^[AB]';
+         name         
+----------------------
+ Aibek Sharshenov
+ Ainura Toktomamatova
+ Bakyt Mamatov
+ Brandon Lee
+ Aida Karimova
+(5 rows)
+
+SELECT email FROM users
+WHERE email ~* '^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$';
+         email         
+-----------------------
+ aibek@gmail.com
+ AINURA@GMAIL.COM
+ timur@mail.ru
+ meerim.bekova@auca.kg
+(4 rows)
+
+SELECT email AS invalid_email FROM users
+WHERE email !~* '^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$';
+ invalid_email  
+----------------
+ bad-email@
+ no at sign.com
+(2 rows)
+
+-- 7. IN and EXISTS
+SELECT name, department FROM employees WHERE department_id IN (3, 5, 7);
+         name         | department  
+----------------------+-------------
+ Aibek Sharshenov     | Engineering
+ Ainura Toktomamatova | Sales
+ Bakyt Mamatov        | Engineering
+ Gulzat Sultanova     | Marketing
+ Brandon Lee          | Sales
+ Timur Asanov         | Engineering
+ Aida Karimova        | Marketing
+(7 rows)
+
+SELECT name FROM employees
+WHERE id IN (SELECT employee_id FROM sales WHERE amount > 1000);
+         name         
+----------------------
+ Ainura Toktomamatova
+ Brandon Lee
+ Aida Karimova
+(3 rows)
+
+SELECT name FROM employees e
+WHERE EXISTS (
+    SELECT 1 FROM sales s
+    WHERE s.employee_id = e.id AND s.amount > 1000
+);
+         name         
+----------------------
+ Ainura Toktomamatova
+ Brandon Lee
+ Aida Karimova
+(3 rows)
+
+-- NOT EXISTS: employees with no sales at all
+SELECT name FROM employees e
+WHERE NOT EXISTS (SELECT 1 FROM sales s WHERE s.employee_id = e.id)
+ORDER BY e.id;
+       name       
+------------------
+ Aibek Sharshenov
+ Bakyt Mamatov
+ Meerim Bekova
+ Timur Asanov
+(4 rows)
+
+-- 8. CASE: IF-THEN-ELSE inside a query
+SELECT name, salary,
+    CASE
+        WHEN salary > 100000 THEN 'Senior'
+        WHEN salary BETWEEN 60000 AND 100000 THEN 'Mid-Level'
+        ELSE 'Junior'
+    END AS employee_level
+FROM employees
+ORDER BY salary DESC;
+         name         |  salary   | employee_level 
+----------------------+-----------+----------------
+ Aibek Sharshenov     | 120000.00 | Senior
+ Aida Karimova        | 102000.00 | Senior
+ Brandon Lee          |  90000.00 | Mid-Level
+ Bakyt Mamatov        |  80000.00 | Mid-Level
+ Timur Asanov         |  70000.00 | Mid-Level
+ Ainura Toktomamatova |  65000.00 | Mid-Level
+ Gulzat Sultanova     |  55000.00 | Junior
+ Meerim Bekova        |  48000.00 | Junior
+(8 rows)
+
+-- 9. CTE (WITH): employees who earn more than their department average
+WITH department_averages AS (
+    SELECT department, ROUND(AVG(salary), 2) AS avg_salary
+    FROM employees
+    GROUP BY department
+)
+SELECT e.name, e.salary, e.department, da.avg_salary
+FROM employees e
+JOIN department_averages da ON e.department = da.department
+WHERE e.salary > da.avg_salary;
+       name       |  salary   | department  | avg_salary 
+------------------+-----------+-------------+------------
+ Aibek Sharshenov | 120000.00 | Engineering |   90000.00
+ Brandon Lee      |  90000.00 | Sales       |   77500.00
+ Aida Karimova    | 102000.00 | Marketing   |   78500.00
+(3 rows)
+
