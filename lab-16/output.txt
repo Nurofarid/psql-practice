@@ -1,0 +1,355 @@
+$ psql -d tx_practice -a -f lab16_transactions.sql
+-- Lab 16: Transactions and ACID Properties
+-- Nurofarid Kukanbekova · AUCA · Databases
+-- Run in a fresh database: tx_practice
+-- 1. Sample data (CHECK constraints make some operations fail on purpose)
+CREATE TABLE accounts (
+    account_id SERIAL PRIMARY KEY,
+    owner VARCHAR(50),
+    balance DECIMAL(10,2) CHECK (balance >= 0)
+);
+CREATE TABLE
+CREATE TABLE customers (customer_id SERIAL PRIMARY KEY, name VARCHAR(50), email VARCHAR(50));
+CREATE TABLE
+CREATE TABLE orders (
+    order_id SERIAL PRIMARY KEY,
+    customer_id INT REFERENCES customers(customer_id),
+    total DECIMAL(10,2)
+);
+CREATE TABLE
+CREATE TABLE inventory (product_id INT PRIMARY KEY, stock INT CHECK (stock >= 0));
+CREATE TABLE
+CREATE TABLE order_items (order_id INT REFERENCES orders(order_id), product_id INT REFERENCES inventory(product_id), quantity INT);
+CREATE TABLE
+CREATE TABLE products (id SERIAL PRIMARY KEY, name VARCHAR(50), price DECIMAL(8,2) CHECK (price > 0));
+CREATE TABLE
+CREATE TABLE logs (id SERIAL PRIMARY KEY, message TEXT);
+CREATE TABLE
+INSERT INTO accounts (owner, balance) VALUES ('Aida', 1000.00), ('Timur', 200.00);
+INSERT 0 2
+INSERT INTO customers (name, email) VALUES ('Meerim Bekova', 'meerim@mail.kg');
+INSERT 0 1
+INSERT INTO inventory VALUES (101, 10), (102, 3);
+INSERT 0 2
+SELECT * FROM accounts ORDER BY account_id;
+ account_id | owner | balance 
+------------+-------+---------
+          1 | Aida  | 1000.00
+          2 | Timur |  200.00
+(2 rows)
+
+-- 2. BEGIN + COMMIT saves, BEGIN + ROLLBACK undoes
+BEGIN;
+BEGIN
+UPDATE accounts SET balance = balance - 100 WHERE account_id = 1;
+UPDATE 1
+UPDATE accounts SET balance = balance + 100 WHERE account_id = 2;
+UPDATE 1
+COMMIT;
+COMMIT
+SELECT * FROM accounts ORDER BY account_id;
+ account_id | owner | balance 
+------------+-------+---------
+          1 | Aida  |  900.00
+          2 | Timur |  300.00
+(2 rows)
+
+START TRANSACTION;
+START TRANSACTION
+UPDATE accounts SET balance = balance - 100 WHERE account_id = 1;
+UPDATE 1
+UPDATE accounts SET balance = balance + 100 WHERE account_id = 2;
+UPDATE 1
+SELECT * FROM accounts ORDER BY account_id;   -- changed inside the transaction
+ account_id | owner | balance 
+------------+-------+---------
+          1 | Aida  |  800.00
+          2 | Timur |  400.00
+(2 rows)
+
+ROLLBACK;
+ROLLBACK
+SELECT * FROM accounts ORDER BY account_id;   -- back to 900 / 300
+ account_id | owner | balance 
+------------+-------+---------
+          1 | Aida  |  900.00
+          2 | Timur |  300.00
+(2 rows)
+
+-- 3. A full transfer of 500: check the balance first, then move the money
+BEGIN TRANSACTION;
+BEGIN
+SELECT balance FROM accounts WHERE account_id = 1;
+ balance 
+---------
+  900.00
+(1 row)
+
+UPDATE accounts SET balance = balance - 500 WHERE account_id = 1;
+UPDATE 1
+UPDATE accounts SET balance = balance + 500 WHERE account_id = 2;
+UPDATE 1
+COMMIT;
+COMMIT
+SELECT * FROM accounts ORDER BY account_id;
+ account_id | owner | balance 
+------------+-------+---------
+          1 | Aida  |  400.00
+          2 | Timur |  800.00
+(2 rows)
+
+-- 4. ATOMICITY: one failing statement cancels the whole transaction
+BEGIN;
+BEGIN
+UPDATE accounts SET balance = balance + 1000 WHERE account_id = 2;   -- this one works...
+UPDATE 1
+-- EXPECTED ERROR: account 1 has only 400, so balance would go below 0 (CHECK)
+UPDATE accounts SET balance = balance - 1000 WHERE account_id = 1;
+psql:lab16_transactions.sql:51: ERROR:  new row for relation "accounts" violates check constraint "accounts_balance_check"
+DETAIL:  Failing row contains (1, Aida, -600.00).
+-- EXPECTED ERROR: after an error PostgreSQL ignores everything until ROLLBACK
+SELECT * FROM accounts;
+psql:lab16_transactions.sql:53: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK;
+ROLLBACK
+SELECT * FROM accounts ORDER BY account_id;   -- Timur did NOT get the 1000
+ account_id | owner | balance 
+------------+-------+---------
+          1 | Aida  |  400.00
+          2 | Timur |  800.00
+(2 rows)
+
+-- 5. CONSISTENCY: constraints keep the data valid
+BEGIN;
+BEGIN
+INSERT INTO customers (name, email) VALUES ('John Doe', 'john@email.com');
+INSERT 0 1
+INSERT INTO orders (customer_id, total) VALUES (currval('customers_customer_id_seq'), 100.00);
+INSERT 0 1
+COMMIT;
+COMMIT
+SELECT c.name, o.order_id, o.total FROM orders o JOIN customers c USING (customer_id);
+   name   | order_id | total  
+----------+----------+--------
+ John Doe |        1 | 100.00
+(1 row)
+
+-- EXPECTED ERROR: customer 99 does not exist, so the foreign key refuses the order
+INSERT INTO orders (customer_id, total) VALUES (99, 50.00);
+psql:lab16_transactions.sql:64: ERROR:  insert or update on table "orders" violates foreign key constraint "orders_customer_id_fkey"
+DETAIL:  Key (customer_id)=(99) is not present in table "customers".
+-- 6. Isolation levels (one session; the two-session demo is in isolation_output.txt)
+SHOW transaction_isolation;   -- the default
+ transaction_isolation 
+-----------------------
+ read committed
+(1 row)
+
+BEGIN TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+BEGIN
+SHOW transaction_isolation;   -- accepted, but PostgreSQL never does dirty reads
+ transaction_isolation 
+-----------------------
+ read uncommitted
+(1 row)
+
+COMMIT;
+COMMIT
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+BEGIN
+SHOW transaction_isolation;
+ transaction_isolation 
+-----------------------
+ repeatable read
+(1 row)
+
+COMMIT;
+COMMIT
+BEGIN;
+BEGIN
+SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET
+SHOW transaction_isolation;
+ transaction_isolation 
+-----------------------
+ serializable
+(1 row)
+
+COMMIT;
+COMMIT
+-- 7. SERIALIZABLE transaction: 5% interest for every account
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+BEGIN
+SELECT * FROM accounts ORDER BY account_id;
+ account_id | owner | balance 
+------------+-------+---------
+          1 | Aida  |  400.00
+          2 | Timur |  800.00
+(2 rows)
+
+UPDATE accounts SET balance = balance * 1.05;
+UPDATE 2
+SELECT * FROM accounts ORDER BY account_id;
+ account_id | owner | balance 
+------------+-------+---------
+          1 | Aida  |  420.00
+          2 | Timur |  840.00
+(2 rows)
+
+COMMIT;
+COMMIT
+-- 8. SAVEPOINT: undo only part of a transaction
+BEGIN;
+BEGIN
+INSERT INTO customers (name, email) VALUES ('Alice', 'alice@email.com');
+INSERT 0 1
+SAVEPOINT after_customer_insert;
+SAVEPOINT
+INSERT INTO orders (customer_id, total) VALUES (1, 500.00);
+INSERT 0 1
+ROLLBACK TO SAVEPOINT after_customer_insert;
+ROLLBACK
+INSERT INTO orders (customer_id, total) VALUES (1, 300.00);
+INSERT 0 1
+COMMIT;
+COMMIT
+SELECT order_id, customer_id, total FROM orders ORDER BY order_id;
+ order_id | customer_id | total  
+----------+-------------+--------
+        1 |           2 | 100.00
+        4 |           1 | 300.00
+(2 rows)
+
+-- 9. Several savepoints, and RELEASE SAVEPOINT
+BEGIN;
+BEGIN
+INSERT INTO products (name, price) VALUES ('Laptop', 999.99);
+INSERT 0 1
+SAVEPOINT sp1;
+SAVEPOINT
+INSERT INTO products (name, price) VALUES ('Mouse', 25.99);
+INSERT 0 1
+SAVEPOINT sp2;
+SAVEPOINT
+-- EXPECTED ERROR: price must be > 0 (CHECK)
+INSERT INTO products (name, price) VALUES ('Invalid Product', -50.00);
+psql:lab16_transactions.sql:103: ERROR:  new row for relation "products" violates check constraint "products_price_check"
+DETAIL:  Failing row contains (3, Invalid Product, -50.00).
+ROLLBACK TO SAVEPOINT sp2;   -- the transaction is usable again
+ROLLBACK
+INSERT INTO products (name, price) VALUES ('Keyboard', 79.99);
+INSERT 0 1
+COMMIT;
+COMMIT
+SELECT * FROM products ORDER BY id;
+ id |   name   | price  
+----+----------+--------
+  1 | Laptop   | 999.99
+  2 | Mouse    |  25.99
+  4 | Keyboard |  79.99
+(3 rows)
+
+BEGIN;
+BEGIN
+INSERT INTO logs (message) VALUES ('Starting process');
+INSERT 0 1
+SAVEPOINT process_start;
+SAVEPOINT
+INSERT INTO logs (message) VALUES ('Process completed');
+INSERT 0 1
+RELEASE SAVEPOINT process_start;
+RELEASE
+COMMIT;
+COMMIT
+-- 10. Handling errors in a DO block
+-- Aida's account has less than 5000, so the block refuses the transfer
+DO $$
+DECLARE
+    current_balance DECIMAL;
+BEGIN
+    SELECT balance INTO current_balance FROM accounts WHERE account_id = 1;
+    IF current_balance < 5000 THEN
+        RAISE NOTICE 'Transaction failed: insufficient funds (balance %)', current_balance;
+        RETURN;
+    END IF;
+    UPDATE accounts SET balance = balance - 5000 WHERE account_id = 1;
+    UPDATE accounts SET balance = balance + 5000 WHERE account_id = 2;
+END $$;
+psql:lab16_transactions.sql:128: NOTICE:  Transaction failed: insufficient funds (balance 420.00)
+DO
+-- EXPECTED ERROR: the handout's version calls ROLLBACK inside the block while BEGIN is open
+BEGIN;
+BEGIN
+DO $$
+BEGIN
+    RAISE NOTICE 'Transaction failed: Insufficient funds';
+    ROLLBACK;
+END $$;
+psql:lab16_transactions.sql:135: NOTICE:  Transaction failed: Insufficient funds
+psql:lab16_transactions.sql:135: ERROR:  invalid transaction termination
+CONTEXT:  PL/pgSQL function inline_code_block line 4 at ROLLBACK
+ROLLBACK;
+ROLLBACK
+-- 11. Best practices: short transactions, savepoints for items, locks
+BEGIN;
+BEGIN
+UPDATE inventory SET stock = stock - 1 WHERE product_id = 101;
+UPDATE 1
+INSERT INTO order_items (order_id, product_id, quantity) VALUES (1, 101, 1);
+INSERT 0 1
+COMMIT;
+COMMIT
+BEGIN;
+BEGIN
+INSERT INTO orders (customer_id, total) VALUES (1, 1000.00);
+INSERT 0 1
+SAVEPOINT before_items;
+SAVEPOINT
+INSERT INTO order_items VALUES (currval('orders_order_id_seq'), 101, 2);
+INSERT 0 1
+INSERT INTO order_items VALUES (currval('orders_order_id_seq'), 102, 1);
+INSERT 0 1
+COMMIT;
+COMMIT
+SELECT * FROM order_items ORDER BY order_id, product_id;
+ order_id | product_id | quantity 
+----------+------------+----------
+        1 |        101 |        1
+        5 |        101 |        2
+        5 |        102 |        1
+(3 rows)
+
+-- blocked transactions right now (none, so 0 rows)
+SELECT blocked_locks.pid AS blocked_pid, blocking_locks.pid AS blocking_pid,
+       blocked_activity.query AS blocked_statement
+FROM pg_catalog.pg_locks blocked_locks
+JOIN pg_catalog.pg_stat_activity blocked_activity ON blocked_activity.pid = blocked_locks.pid
+JOIN pg_catalog.pg_locks blocking_locks ON blocking_locks.locktype = blocked_locks.locktype
+WHERE NOT blocked_locks.granted;
+ blocked_pid | blocking_pid | blocked_statement 
+-------------+--------------+-------------------
+(0 rows)
+
+-- 12. DURABILITY: reconnect and the committed data is still there
+\c tx_practice
+You are now connected to database "tx_practice" as user "nurofaridkukanbekova".
+SELECT * FROM accounts ORDER BY account_id;
+ account_id | owner | balance 
+------------+-------+---------
+          1 | Aida  |  420.00
+          2 | Timur |  840.00
+(2 rows)
+
+SELECT count(*) AS products_saved FROM products;
+ products_saved 
+----------------
+              3
+(1 row)
+
+SELECT * FROM logs;
+ id |      message      
+----+-------------------
+  1 | Starting process
+  2 | Process completed
+(2 rows)
+

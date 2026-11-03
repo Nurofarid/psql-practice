@@ -1,0 +1,55 @@
+$ bash isolation_demo.sh
+=== Session A: READ COMMITTED ===
+=== Session B (runs during A's pause) ===
+UPDATE accounts SET balance = 1 WHERE account_id = 2
+UPDATE 1
+BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
+BEGIN
+SELECT balance AS first_read FROM accounts WHERE account_id = 2;
+ first_read 
+------------
+    1000.00
+(1 row)
+
+SELECT pg_sleep(2);   -- session B updates the row during this pause
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT balance AS second_read FROM accounts WHERE account_id = 2;
+ second_read 
+-------------
+        1.00
+(1 row)
+
+COMMIT;
+COMMIT
+
+=== Session A: REPEATABLE READ ===
+=== Session B (runs during A's pause) ===
+UPDATE accounts SET balance = 1 WHERE account_id = 2
+UPDATE 1
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+BEGIN
+SELECT balance AS first_read FROM accounts WHERE account_id = 2;
+ first_read 
+------------
+    1000.00
+(1 row)
+
+SELECT pg_sleep(2);   -- session B updates the row during this pause
+ pg_sleep 
+----------
+ 
+(1 row)
+
+SELECT balance AS second_read FROM accounts WHERE account_id = 2;
+ second_read 
+-------------
+     1000.00
+(1 row)
+
+COMMIT;
+COMMIT
+
