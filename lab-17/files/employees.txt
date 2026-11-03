@@ -1,0 +1,5 @@
+id|first_name|last_name|email|department
+1|Aibek|Sharshenov|aibek@co.kg|IT
+2|Ainura|Toktomamatova|N/A|Sales
+3|Bakyt|Mamatov|bakyt@co.kg|IT
+4|Meerim|Bekova|meerim@co.kg|HR

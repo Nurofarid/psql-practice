@@ -1,0 +1,352 @@
+$ psql -d shop_db -a -f lab17_copy.sql
+-- Lab 17: Data Import/Export and Backup (part 1: COPY and CSV)
+-- Nurofarid Kukanbekova · AUCA · Databases
+-- Runs in shop_db from the lab-17 folder; files go to lab-17/files/
+-- 1. Sample tables
+CREATE TABLE employees (
+    id SERIAL PRIMARY KEY, first_name VARCHAR(30), last_name VARCHAR(30),
+    email VARCHAR(50), department VARCHAR(20)
+);
+CREATE TABLE
+INSERT INTO employees (first_name, last_name, email, department) VALUES
+    ('Aibek', 'Sharshenov', 'aibek@co.kg', 'IT'), ('Ainura', 'Toktomamatova', NULL, 'Sales'),
+    ('Bakyt', 'Mamatov', 'bakyt@co.kg', 'IT'), ('Meerim', 'Bekova', 'meerim@co.kg', 'HR');
+INSERT 0 4
+CREATE TABLE products (id INT PRIMARY KEY, name VARCHAR(50), price NUMERIC(8,2));
+CREATE TABLE
+INSERT INTO products VALUES (1, 'Laptop', 1200.00), (2, 'Phone', 650.00), (3, 'Headphones', 80.00);
+INSERT 0 3
+CREATE TABLE orders (order_id INT PRIMARY KEY, customer VARCHAR(30), order_date DATE, total NUMERIC(8,2));
+CREATE TABLE
+INSERT INTO orders VALUES (1, 'Aida', '2026-10-01', 250.00), (2, 'Timur', '2026-10-15', 45.50);
+INSERT 0 2
+CREATE TABLE customer_feedback (id INT, comment TEXT);
+CREATE TABLE
+INSERT INTO customer_feedback VALUES
+    (1, 'Fast delivery, good price'), (2, 'The box said "fragile", but it was fine');
+INSERT 0 2
+CREATE TABLE log_table (id SERIAL, message TEXT);
+CREATE TABLE
+INSERT INTO log_table (message) VALUES ('debug 1'), ('debug 2');
+INSERT 0 2
+-- 2. Server-side COPY: the PostgreSQL server itself writes the file
+COPY (SELECT * FROM employees WHERE department = 'IT') TO '/tmp/it_employees.csv' WITH CSV HEADER;
+COPY 2
+\! cat /tmp/it_employees.csv
+id,first_name,last_name,email,department
+1,Aibek,Sharshenov,aibek@co.kg,IT
+3,Bakyt,Mamatov,bakyt@co.kg,IT
+-- 3. Export with \copy (psql writes the file in my folder) and different options
+\copy products TO 'files/products.csv' WITH CSV HEADER
+COPY 3
+\! cat files/products.csv
+id,name,price
+1,Laptop,1200.00
+2,Phone,650.00
+3,Headphones,80.00
+\copy employees TO 'files/employees.txt' WITH DELIMITER '|' NULL 'N/A' CSV HEADER
+COPY 4
+\! cat files/employees.txt
+id|first_name|last_name|email|department
+1|Aibek|Sharshenov|aibek@co.kg|IT
+2|Ainura|Toktomamatova|N/A|Sales
+3|Bakyt|Mamatov|bakyt@co.kg|IT
+4|Meerim|Bekova|meerim@co.kg|HR
+\copy employees TO 'files/customers_semicolon.csv' WITH CSV HEADER DELIMITER ';' QUOTE '"'
+COPY 4
+\! cat files/customers_semicolon.csv
+id;first_name;last_name;email;department
+1;Aibek;Sharshenov;aibek@co.kg;IT
+2;Ainura;Toktomamatova;;Sales
+3;Bakyt;Mamatov;bakyt@co.kg;IT
+4;Meerim;Bekova;meerim@co.kg;HR
+\copy orders TO 'files/orders.csv' WITH (FORMAT csv, HEADER, FORCE_QUOTE (order_date))
+COPY 2
+\! cat files/orders.csv
+order_id,customer,order_date,total
+1,Aida,"2026-10-01",250.00
+2,Timur,"2026-10-15",45.50
+\copy customer_feedback TO 'files/feedback.csv' WITH CSV HEADER DELIMITER ',' QUOTE '"' ESCAPE '"'
+COPY 2
+\! cat files/feedback.csv
+id,comment
+1,"Fast delivery, good price"
+2,"The box said ""fragile"", but it was fine"
+-- 4. Import: a full table, specific columns, custom NULL text
+CREATE TABLE products_copy (LIKE products);
+CREATE TABLE
+\copy products_copy FROM 'files/products.csv' WITH CSV HEADER ENCODING 'UTF8'
+COPY 3
+SELECT * FROM products_copy;
+ id |    name    |  price  
+----+------------+---------
+  1 | Laptop     | 1200.00
+  2 | Phone      |  650.00
+  3 | Headphones |   80.00
+(3 rows)
+
+\! printf 'first_name,last_name,email\nTilek,Usubaliev,tilek@co.kg\nGulzat,Sultanova,NULL\n' > files/new_employees.csv
+\copy employees(first_name, last_name, email) FROM 'files/new_employees.csv' WITH CSV HEADER NULL 'NULL'
+COPY 2
+SELECT id, first_name, email, department FROM employees WHERE id > 4;
+ id | first_name |    email    | department 
+----+------------+-------------+------------
+  5 | Tilek      | tilek@co.kg | 
+  6 | Gulzat     |             | 
+(2 rows)
+
+-- the feedback with commas and quotes comes back exactly the same
+CREATE TABLE feedback_copy (LIKE customer_feedback);
+CREATE TABLE
+\copy feedback_copy FROM 'files/feedback.csv' WITH CSV HEADER
+COPY 2
+SELECT * FROM feedback_copy;
+ id |                 comment                 
+----+-----------------------------------------
+  1 | Fast delivery, good price
+  2 | The box said "fragile", but it was fine
+(2 rows)
+
+-- 5. Import with bad rows
+\! printf 'id,name,price\n10,Mouse,25.00\n11,Keyboard,not-a-price\n12,Monitor,300.00\n' > files/products_with_errors.csv
+-- EXPECTED ERROR: without ON_ERROR the whole COPY stops at the bad price
+\copy products FROM 'files/products_with_errors.csv' WITH CSV HEADER
+psql:lab17_copy.sql:54: ERROR:  invalid input syntax for type numeric: "not-a-price"
+CONTEXT:  COPY products, line 3, column price: "not-a-price"
+SELECT count(*) AS products_after_failed_copy FROM products;
+ products_after_failed_copy 
+----------------------------
+                          3
+(1 row)
+
+-- ON_ERROR IGNORE (PostgreSQL 17+) skips the bad row and loads the rest
+\copy products FROM 'files/products_with_errors.csv' WITH (FORMAT csv, HEADER, ON_ERROR ignore)
+psql:lab17_copy.sql:57: NOTICE:  1 row was skipped due to data type incompatibility
+COPY 2
+SELECT * FROM products ORDER BY id;
+ id |    name    |  price  
+----+------------+---------
+  1 | Laptop     | 1200.00
+  2 | Phone      |  650.00
+  3 | Headphones |   80.00
+ 10 | Mouse      |   25.00
+ 12 | Monitor    |  300.00
+(5 rows)
+
+
+-- 6. pg_dump: plain SQL, custom format, single tables, schema/data only
+$ pg_dump -h localhost -U $USER -d shop_db > backups/backup.sql
+
+$ pg_dump -h localhost -U $USER -d shop_db -Fc > backups/backup.dump
+
+$ pg_dump -h localhost -U $USER -d shop_db -t employees -t products > backups/tables_backup.sql
+
+$ pg_dump -h localhost -U $USER -d shop_db -s > backups/schema_only.sql
+
+$ pg_dump -h localhost -U $USER -d shop_db -a > backups/data_only.sql
+
+$ pg_dump -h localhost -U $USER -d shop_db -T log_table > backups/backup_without_logs.sql
+
+$ wc -c backups/*
+    8432 backups/backup.dump
+    6576 backups/backup.sql
+    5808 backups/backup_without_logs.sql
+    2696 backups/data_only.sql
+    4572 backups/schema_only.sql
+    3200 backups/tables_backup.sql
+   31284 total
+
+$ grep -c "CREATE TABLE" backups/backup.sql backups/schema_only.sql backups/data_only.sql backups/tables_backup.sql backups/backup_without_logs.sql
+backups/backup.sql:7
+backups/schema_only.sql:7
+backups/data_only.sql:0
+backups/tables_backup.sql:2
+backups/backup_without_logs.sql:6
+
+$ grep -A3 "COPY public.products " backups/backup.sql
+COPY public.products (id, name, price) FROM stdin;
+1	Laptop	1200.00
+2	Phone	650.00
+3	Headphones	80.00
+
+-- 7. pg_restore: check the backup, restore everything, restore one table
+$ pg_restore --list backups/backup.dump | grep "TABLE DATA"
+3879; 0 19123 TABLE DATA public customer_feedback nurofaridkukanbekova
+3876; 0 19104 TABLE DATA public employees nurofaridkukanbekova
+3883; 0 19140 TABLE DATA public feedback_copy nurofaridkukanbekova
+3881; 0 19129 TABLE DATA public log_table nurofaridkukanbekova
+3878; 0 19117 TABLE DATA public orders nurofaridkukanbekova
+3877; 0 19111 TABLE DATA public products nurofaridkukanbekova
+3882; 0 19136 TABLE DATA public products_copy nurofaridkukanbekova
+
+$ createdb shop_restored
+
+$ pg_restore -h localhost -U $USER -d shop_restored -j 2 backups/backup.dump
+
+$ psql -X -d shop_restored -c "SELECT count(*) AS employees FROM employees" -c "SELECT count(*) AS products FROM products"
+ employees 
+-----------
+         6
+(1 row)
+
+ products 
+----------
+        5
+(1 row)
+
+
+$ createdb shop_tables
+
+$ pg_restore -d shop_tables -t products backups/backup.dump
+
+$ psql -X -d shop_tables -c "\dt"
+                  List of tables
+ Schema |   Name   | Type  |        Owner         
+--------+----------+-------+----------------------
+ public | products | table | nurofaridkukanbekova
+(1 row)
+
+
+-- 8. Full backups: whole cluster (roles only here) and a verbose full dump
+$ pg_dumpall -h localhost -U $USER --globals-only > backups/globals.sql && grep -c "ROLE" backups/globals.sql
+2
+
+$ pg_dump -h localhost -U $USER -d shop_db -Fc --verbose -O > backups/full_backup.dump 2> backups/verbose.log; tail -3 backups/verbose.log
+pg_dump: dumping contents of table "public.orders"
+pg_dump: dumping contents of table "public.products"
+pg_dump: dumping contents of table "public.products_copy"
+
+-- 9. Automated backup script and validation
+$ cat backup_script.sh
+#!/bin/bash
+# Daily backup script (the handout's example, pointed at this lab's folder)
+DATE=$(date +%Y%m%d_%H%M%S)
+BACKUP_DIR="backups"
+DB_NAME="shop_db"
+pg_dump -h localhost -U "$USER" -d $DB_NAME -Fc > "$BACKUP_DIR/${DB_NAME}_${DATE}.dump"
+echo "Saved $BACKUP_DIR/${DB_NAME}_${DATE}.dump"
+# Keep only the last 7 days of backups
+find $BACKUP_DIR -name "${DB_NAME}_*.dump" -mtime +7 -delete
+
+$ bash backup_script.sh
+Saved backups/shop_db_20261103_120551.dump
+
+$ ls backups | grep shop_db_
+shop_db_20261103_120551.dump
+
+$ createdb test_restore && pg_restore -d test_restore backups/full_backup.dump && psql -X -d test_restore -Atc "SELECT 'restored tables: ' || count(*) FROM pg_tables WHERE schemaname = 'public'"
+restored tables: 7
+
+$ psql -d shop_db -a -f lab17_wal_migration.sql
+-- Lab 17 part 3: WAL, restore points, replication and ETL migration
+-- Runs in shop_db after the backup steps
+-- 10. WAL settings, restore point, WAL switch
+SHOW wal_level;
+ wal_level 
+-----------
+ replica
+(1 row)
+
+SHOW archive_mode;
+ archive_mode 
+--------------
+ off
+(1 row)
+
+SELECT pg_create_restore_point('before_data_migration') IS NOT NULL AS restore_point_created;
+ restore_point_created 
+-----------------------
+ t
+(1 row)
+
+SELECT pg_current_wal_lsn() IS NOT NULL AS wal_position_known;
+ wal_position_known 
+--------------------
+ t
+(1 row)
+
+SELECT pg_switch_wal() IS NOT NULL AS wal_switched;
+ wal_switched 
+--------------
+ t
+(1 row)
+
+-- 11. Logical replication: a publication (the subscription would be on another server)
+CREATE PUBLICATION migration_pub FOR ALL TABLES;
+psql:lab17_wal_migration.sql:12: WARNING:  "wal_level" is insufficient to publish logical changes
+HINT:  Set "wal_level" to "logical" before creating subscriptions.
+CREATE PUBLICATION
+SELECT pubname, puballtables FROM pg_publication;
+    pubname    | puballtables 
+---------------+--------------
+ migration_pub | t
+(1 row)
+
+DROP PUBLICATION migration_pub;
+DROP PUBLICATION
+-- 12. ETL migration: staging table, batch export/import, merge with ON CONFLICT
+CREATE TABLE target_customers (customer_id INT PRIMARY KEY, name VARCHAR(30), city VARCHAR(30));
+CREATE TABLE
+INSERT INTO target_customers VALUES (1, 'Aida', 'Osh'), (2, 'Timur', 'Bishkek');
+INSERT 0 2
+CREATE TABLE customers (customer_id INT PRIMARY KEY, name VARCHAR(30), city VARCHAR(30));
+CREATE TABLE
+INSERT INTO customers VALUES (1, 'Aida', 'Bishkek'), (2, 'Timur', 'Bishkek'), (3, 'Meerim', 'Naryn');
+INSERT 0 3
+CREATE TABLE staging_customers AS SELECT * FROM customers WHERE 1=0;
+SELECT 0
+\copy (SELECT * FROM customers ORDER BY customer_id LIMIT 10000 OFFSET 0) TO 'files/customers_batch_1.csv' WITH CSV HEADER
+COPY 3
+\copy staging_customers FROM 'files/customers_batch_1.csv' WITH CSV HEADER
+COPY 3
+SELECT count(*) AS source_rows FROM customers;
+ source_rows 
+-------------
+           3
+(1 row)
+
+INSERT INTO target_customers
+SELECT * FROM staging_customers
+ON CONFLICT (customer_id) DO UPDATE SET name = EXCLUDED.name, city = EXCLUDED.city;
+INSERT 0 3
+SELECT * FROM target_customers ORDER BY customer_id;
+ customer_id |  name  |  city   
+-------------+--------+---------
+           1 | Aida   | Bishkek
+           2 | Timur  | Bishkek
+           3 | Meerim | Naryn
+(3 rows)
+
+SELECT count(*) AS target_rows FROM target_customers;
+ target_rows 
+-------------
+           3
+(1 row)
+
+-- 13. Partitioning a large table so it can be migrated piece by piece
+CREATE TABLE large_table (id INT, created DATE, amount NUMERIC) PARTITION BY RANGE (created);
+CREATE TABLE
+CREATE TABLE large_table_2025 PARTITION OF large_table FOR VALUES FROM ('2025-01-01') TO ('2026-01-01');
+CREATE TABLE
+CREATE TABLE large_table_2026 PARTITION OF large_table FOR VALUES FROM ('2026-01-01') TO ('2027-01-01');
+CREATE TABLE
+INSERT INTO large_table SELECT g, DATE '2025-01-01' + g, g * 10 FROM generate_series(1, 600) g;
+INSERT 0 600
+SELECT tableoid::regclass AS partition, count(*) FROM large_table GROUP BY 1 ORDER BY 1;
+    partition     | count 
+------------------+-------
+ large_table_2025 |   364
+ large_table_2026 |   236
+(2 rows)
+
+
+-- 14. Migration best practice: copy one table straight into another database with a pipe
+$ pg_dump -d shop_db -t target_customers | psql -X -q -d test_restore > /dev/null
+
+$ psql -X -d test_restore -c "SELECT count(*) AS migrated_rows FROM target_customers"
+ migrated_rows 
+---------------
+             3
+(1 row)
+
+
